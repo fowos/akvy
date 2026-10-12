@@ -156,6 +156,7 @@ defmodule Akvy.FFmpeg do
     end
   end
 
+  @spec flush_partial(String.t(), (String.t(), acc() -> acc()), acc()) :: acc()
   defp flush_partial("", _on_line, acc), do: acc
   defp flush_partial(partial, on_line, acc), do: on_line.(partial, acc)
 
@@ -187,12 +188,14 @@ defmodule Akvy.FFmpeg do
     _ -> :ok
   end
 
+  @spec safe_close(port()) :: true | :ok
   defp safe_close(port) do
     Port.close(port)
   rescue
     _ -> :ok
   end
 
+  @spec config() :: keyword()
   defp config, do: Application.get_env(:akvy, __MODULE__, [])
 
   @spec executable() :: String.t() | nil
@@ -205,5 +208,6 @@ defmodule Akvy.FFmpeg do
     end
   end
 
+  @spec now() :: integer()
   defp now, do: System.monotonic_time(:millisecond)
 end

@@ -13,35 +13,13 @@ defmodule Akvy.Accounts do
 
   ## Database getters
 
-  @doc """
-  Gets a user by email.
-
-  ## Examples
-
-      iex> get_user_by_email("foo@example.com")
-      %User{}
-
-      iex> get_user_by_email("unknown@example.com")
-      nil
-
-  """
+  @doc "Gets a user by email, or nil."
   @spec get_user_by_email(String.t()) :: User.t() | nil
   def get_user_by_email(email) when is_binary(email) do
     Repo.get_by(User, email: email)
   end
 
-  @doc """
-  Gets a user by email and password.
-
-  ## Examples
-
-      iex> get_user_by_email_and_password("foo@example.com", "correct_password")
-      %User{}
-
-      iex> get_user_by_email_and_password("foo@example.com", "invalid_password")
-      nil
-
-  """
+  @doc "Gets a user by email if the password is valid, or nil."
   @spec get_user_by_email_and_password(String.t(), String.t()) :: User.t() | nil
   def get_user_by_email_and_password(email, password)
       when is_binary(email) and is_binary(password) do
@@ -49,37 +27,13 @@ defmodule Akvy.Accounts do
     if User.valid_password?(user, password), do: user
   end
 
-  @doc """
-  Gets a single user.
-
-  Raises `Ecto.NoResultsError` if the User does not exist.
-
-  ## Examples
-
-      iex> get_user!(123)
-      %User{}
-
-      iex> get_user!(456)
-      ** (Ecto.NoResultsError)
-
-  """
+  @doc "Gets a user by id. Raises `Ecto.NoResultsError` if not found."
   @spec get_user!(UUIDv7.t()) :: User.t()
   def get_user!(id), do: Repo.get!(User, id)
 
   ## User registration
 
-  @doc """
-  Registers a user.
-
-  ## Examples
-
-      iex> register_user(%{field: value})
-      {:ok, %User{}}
-
-      iex> register_user(%{field: bad_value})
-      {:error, %Ecto.Changeset{}}
-
-  """
+  @doc "Registers a user with an email only (no password)."
   @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t(User.t())}
   def register_user(attrs) do
     %User{}
@@ -102,12 +56,7 @@ defmodule Akvy.Accounts do
 
   ## Settings
 
-  @doc """
-  Checks whether the user is in sudo mode.
-
-  The user is in sudo mode when the last authentication was done no further
-  than 20 minutes ago. The limit can be given as second argument in minutes.
-  """
+  @doc "True when the user authenticated after `minutes` from now (default `-20`: 20 minutes ago)."
   @spec sudo_mode?(User.t() | nil, integer()) :: boolean()
   def sudo_mode?(user, minutes \\ -20)
 
@@ -117,29 +66,14 @@ defmodule Akvy.Accounts do
 
   def sudo_mode?(_user, _minutes), do: false
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for changing the user email.
-
-  See `Akvy.Accounts.User.email_changeset/3` for a list of supported options.
-
-  ## Examples
-
-      iex> change_user_email(user)
-      %Ecto.Changeset{data: %User{}}
-
-  """
+  @doc "Changeset for changing the email; options as in `Akvy.Accounts.User.email_changeset/3`."
   @spec change_user_email(User.t(), map(), [User.email_option()]) ::
           Ecto.Changeset.t(User.t())
   def change_user_email(user, attrs \\ %{}, opts \\ []) do
     User.email_changeset(user, attrs, opts)
   end
 
-  @doc """
-  Updates the user email using the given token.
-
-  If the token matches, the user email is updated and all email change tokens
-  for the old address are deleted.
-  """
+  @doc "Applies an email change confirmed by `token` and deletes the change tokens."
   @spec update_user_email(User.t(), String.t()) ::
           {:ok, User.t()} | {:error, :transaction_aborted}
   def update_user_email(user, token) do
@@ -158,37 +92,14 @@ defmodule Akvy.Accounts do
     end)
   end
 
-  @doc """
-  Returns an `%Ecto.Changeset{}` for changing the user password.
-
-  See `Akvy.Accounts.User.password_changeset/3` for a list of supported options.
-
-  ## Examples
-
-      iex> change_user_password(user)
-      %Ecto.Changeset{data: %User{}}
-
-  """
+  @doc "Changeset for changing the password; options as in `Akvy.Accounts.User.password_changeset/3`."
   @spec change_user_password(User.t(), map(), [User.password_option()]) ::
           Ecto.Changeset.t(User.t())
   def change_user_password(user, attrs \\ %{}, opts \\ []) do
     User.password_changeset(user, attrs, opts)
   end
 
-  @doc """
-  Updates the user password.
-
-  Returns a tuple with the updated user, as well as a list of expired tokens.
-
-  ## Examples
-
-      iex> update_user_password(user, %{password: ...})
-      {:ok, {%User{}, [...]}}
-
-      iex> update_user_password(user, %{password: "too short"})
-      {:error, %Ecto.Changeset{}}
-
-  """
+  @doc "Updates the password and deletes all tokens of the user; returns the deleted tokens."
   @spec update_user_password(User.t(), map()) ::
           {:ok, user_and_expired_tokens()} | {:error, Ecto.Changeset.t(User.t())}
   def update_user_password(user, attrs) do
@@ -207,11 +118,7 @@ defmodule Akvy.Accounts do
     token
   end
 
-  @doc """
-  Gets the user with the given signed token.
-
-  If the token is valid `{user, token_inserted_at}` is returned, otherwise `nil` is returned.
-  """
+  @doc "Returns `{user, token_inserted_at}` for a valid session token, or nil."
   @spec get_user_by_session_token(binary()) :: {User.t(), DateTime.t()} | nil
   def get_user_by_session_token(token) do
     {:ok, query} = UserToken.verify_session_token_query(token)
@@ -230,22 +137,10 @@ defmodule Akvy.Accounts do
   end
 
   @doc """
-  Logs the user in by magic link.
+  Logs the user in by magic link and deletes the link.
 
-  There are three cases to consider:
-
-  1. The user has already confirmed their email. They are logged in
-     and the magic link is expired.
-
-  2. The user has not confirmed their email and no password is set.
-     In this case, the user gets confirmed, logged in, and all tokens -
-     including session ones - are expired. In theory, no other tokens
-     exist but we delete all of them for best security practices.
-
-  3. The user has not confirmed their email but a password is set.
-     This cannot happen in the default implementation but may be the
-     source of security pitfalls. See the "Mixing magic link and password registration" section of
-     `mix help phx.gen.auth`.
+  An unconfirmed user is confirmed and all their tokens are deleted. Raises for an
+  unconfirmed user with a password (session fixation protection).
   """
   @spec login_user_by_magic_link(String.t()) ::
           {:ok, user_and_expired_tokens()}
@@ -278,15 +173,7 @@ defmodule Akvy.Accounts do
     end
   end
 
-  @doc ~S"""
-  Delivers the update email instructions to the given user.
-
-  ## Examples
-
-      iex> deliver_user_update_email_instructions(user, current_email, &url(~p"/users/settings/confirm-email/#{&1}"))
-      {:ok, %{to: ..., body: ...}}
-
-  """
+  @doc "Stores an email change token and emails the link built by `update_email_url_fun`."
   @spec deliver_user_update_email_instructions(
           User.t(),
           String.t(),

@@ -177,12 +177,14 @@ defmodule AkvyWeb.UserAuth do
 
   defp maybe_write_remember_me_cookie(conn, _token, _params, _), do: conn
 
+  @spec write_remember_me_cookie(Plug.Conn.t(), binary()) :: Plug.Conn.t()
   defp write_remember_me_cookie(conn, token) do
     conn
     |> put_session(:user_remember_me, true)
     |> put_resp_cookie(@remember_me_cookie, token, @remember_me_options)
   end
 
+  @spec put_token_in_session(Plug.Conn.t(), binary()) :: Plug.Conn.t()
   defp put_token_in_session(conn, token) do
     conn
     |> put_session(:user_token, token)
@@ -197,39 +199,14 @@ defmodule AkvyWeb.UserAuth do
     end)
   end
 
+  @spec user_session_topic(binary()) :: String.t()
   defp user_session_topic(token), do: "users_sessions:#{Base.url_encode64(token)}"
 
   @doc """
-  Handles mounting and authenticating the current_scope in LiveViews.
+  LiveView hook that assigns `current_scope` from the session.
 
-  ## `on_mount` arguments
-
-    * `:mount_current_scope` - Assigns current_scope
-      to socket assigns based on user_token, or nil if
-      there's no user_token or no matching user.
-
-    * `:require_authenticated` - Authenticates the user from the session,
-      and assigns the current_scope to socket assigns based
-      on user_token.
-      Redirects to login page if there's no logged user.
-
-  ## Examples
-
-  Use the `on_mount` lifecycle macro in LiveViews to mount or authenticate
-  the `current_scope`:
-
-      defmodule AkvyWeb.PageLive do
-        use AkvyWeb, :live_view
-
-        on_mount {AkvyWeb.UserAuth, :mount_current_scope}
-        ...
-      end
-
-  Or use the `live_session` of your router to invoke the on_mount callback:
-
-      live_session :authenticated, on_mount: [{AkvyWeb.UserAuth, :require_authenticated}] do
-        live "/profile", ProfileLive, :index
-      end
+    * `:mount_current_scope` — assigns the scope, or nil without a logged-in user.
+    * `:require_authenticated` — also redirects to the log-in page without a user.
   """
   @spec on_mount(
           on_mount_name(),
@@ -301,6 +278,7 @@ defmodule AkvyWeb.UserAuth do
     end
   end
 
+  @spec maybe_store_return_to(Plug.Conn.t()) :: Plug.Conn.t()
   defp maybe_store_return_to(%{method: "GET"} = conn) do
     put_session(conn, :user_return_to, current_path(conn))
   end

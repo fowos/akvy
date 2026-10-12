@@ -277,6 +277,7 @@ defmodule AkvyWeb.Admin.ClusterLive do
     """
   end
 
+  @spec format_cpu(number() | nil) :: String.t()
   defp format_cpu(nil), do: "n/a"
   defp format_cpu(value), do: "#{Float.round(value * 1.0, 1)}%"
 

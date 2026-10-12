@@ -114,6 +114,7 @@ defmodule AkvyWeb.AdminComponents do
     """
   end
 
+  @spec tone_class(String.t()) :: String.t()
   defp tone_class("primary"), do: "bg-primary/10 text-primary"
   defp tone_class("info"), do: "bg-info/10 text-info"
   defp tone_class("success"), do: "bg-success/10 text-success"
@@ -140,6 +141,7 @@ defmodule AkvyWeb.AdminComponents do
     """
   end
 
+  @spec status_class(atom() | String.t()) :: String.t()
   defp status_class(status) do
     case to_string(status) do
       "uploaded" -> "bg-base-200 text-base-content/70"
@@ -353,6 +355,7 @@ defmodule AkvyWeb.AdminComponents do
   def format_time(nil), do: "—"
   def format_time(%DateTime{} = dt), do: Calendar.strftime(dt, "%H:%M:%S.") <> pad_ms(dt)
 
+  @spec pad_ms(DateTime.t()) :: String.t()
   defp pad_ms(%DateTime{microsecond: {us, _}}),
     do: us |> div(1000) |> Integer.to_string() |> String.pad_leading(3, "0")
 
@@ -370,6 +373,7 @@ defmodule AkvyWeb.AdminComponents do
     end
   end
 
+  @spec human_seconds(non_neg_integer()) :: String.t()
   defp human_seconds(s) when s < 60, do: "#{s}s"
   defp human_seconds(s) when s < 3600, do: "#{div(s, 60)}m"
   defp human_seconds(s) when s < 86_400, do: "#{div(s, 3600)}h"
@@ -380,6 +384,7 @@ defmodule AkvyWeb.AdminComponents do
   def format_percent(_part, 0), do: "—"
   def format_percent(part, total), do: "#{Float.round(part * 100 / total, 1)}%"
 
+  @spec format_bucket(DateTime.t() | term()) :: String.t()
   defp format_bucket(%DateTime{} = dt), do: Calendar.strftime(dt, "%d.%m %H:%M")
   defp format_bucket(_), do: ""
 end

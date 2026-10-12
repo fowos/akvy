@@ -59,8 +59,10 @@ defmodule Akvy.Release do
     end
   end
 
+  @spec repos() :: [Ecto.Repo.t()]
   defp repos, do: Application.fetch_env!(@app, :ecto_repos)
 
+  @spec load_app() :: :ok | {:error, term()}
   defp load_app do
     Application.ensure_all_started(:ssl)
     Application.ensure_loaded(@app)

@@ -32,15 +32,9 @@ defmodule Akvy.Accounts.User do
   end
 
   @doc """
-  A user changeset for registering or changing the email.
+  Changeset for registering or changing the email; the email must change.
 
-  It requires the email to change otherwise an error is added.
-
-  ## Options
-
-    * `:validate_unique` - Set to false if you don't want to validate the
-      uniqueness of the email, useful when displaying live validations.
-      Defaults to `true`.
+  Option `validate_unique: false` skips the database uniqueness check (for live validation).
   """
   @spec email_changeset(t(), map(), [email_option()]) :: Ecto.Changeset.t(t())
   def email_changeset(user, attrs, opts \\ []) do
@@ -49,6 +43,7 @@ defmodule Akvy.Accounts.User do
     |> validate_email(opts)
   end
 
+  @spec validate_email(Ecto.Changeset.t(), keyword()) :: Ecto.Changeset.t()
   defp validate_email(changeset, opts) do
     changeset =
       changeset
@@ -68,6 +63,7 @@ defmodule Akvy.Accounts.User do
     end
   end
 
+  @spec validate_email_changed(Ecto.Changeset.t()) :: Ecto.Changeset.t()
   defp validate_email_changed(changeset) do
     if get_field(changeset, :email) && get_change(changeset, :email) == nil do
       add_error(changeset, :email, "did not change")
@@ -77,19 +73,9 @@ defmodule Akvy.Accounts.User do
   end
 
   @doc """
-  A user changeset for changing the password.
+  Changeset for setting the password (12 to 72 characters).
 
-  It is important to validate the length of the password, as long passwords may
-  be very expensive to hash for certain algorithms.
-
-  ## Options
-
-    * `:hash_password` - Hashes the password so it can be stored securely
-      in the database and ensures the password field is cleared to prevent
-      leaks in the logs. If password hashing is not needed and clearing the
-      password field is not desired (like when using this changeset for
-      validations on a LiveView form), this option can be set to `false`.
-      Defaults to `true`.
+  Option `hash_password: false` keeps the plain password and skips hashing (for live validation).
   """
   @spec password_changeset(t() | Ecto.Changeset.t(t()), map(), [password_option()]) ::
           Ecto.Changeset.t(t())
@@ -100,6 +86,7 @@ defmodule Akvy.Accounts.User do
     |> validate_password(opts)
   end
 
+  @spec validate_password(Ecto.Changeset.t(), keyword()) :: Ecto.Changeset.t()
   defp validate_password(changeset, opts) do
     changeset
     |> validate_required([:password])
@@ -111,6 +98,7 @@ defmodule Akvy.Accounts.User do
     |> maybe_hash_password(opts)
   end
 
+  @spec maybe_hash_password(Ecto.Changeset.t(), keyword()) :: Ecto.Changeset.t()
   defp maybe_hash_password(changeset, opts) do
     hash_password? = Keyword.get(opts, :hash_password, true)
     password = get_change(changeset, :password)
@@ -135,12 +123,7 @@ defmodule Akvy.Accounts.User do
     change(user, confirmed_at: now)
   end
 
-  @doc """
-  Verifies the password.
-
-  If there is no user or the user doesn't have a password, we call
-  `Pbkdf2.no_user_verify/0` to avoid timing attacks.
-  """
+  @doc "Verifies the password; takes constant time even without a user."
   @spec valid_password?(t() | nil, String.t()) :: boolean()
   def valid_password?(%Akvy.Accounts.User{hashed_password: hashed_password}, password)
       when is_binary(hashed_password) and byte_size(password) > 0 do

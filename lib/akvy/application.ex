@@ -45,12 +45,15 @@ defmodule Akvy.Application do
 
   # Migrations run automatically in releases unless AUTO_MIGRATE=false.
   # In development and tests they are run with mix.
+  @spec auto_migrate?() :: boolean()
   defp auto_migrate? do
     System.get_env("RELEASE_NAME") != nil and System.get_env("AUTO_MIGRATE") != "false"
   end
 
+  @spec heartbeat_enabled?() :: boolean()
   defp heartbeat_enabled?, do: Application.get_env(:akvy, Akvy.Heartbeat)[:enabled] == true
 
+  @spec ensure_bucket() :: :ok
   defp ensure_bucket do
     case Akvy.Storage.ensure_bucket() do
       :ok -> :ok

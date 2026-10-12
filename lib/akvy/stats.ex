@@ -208,6 +208,7 @@ defmodule Akvy.Stats do
     end
   end
 
+  @spec retried_count(DateTime.t(), UUIDv7.t() | nil) :: non_neg_integer()
   defp retried_count(since, queue_id) do
     Task
     |> where([t], t.inserted_at >= ^since and t.attempt > 1)
@@ -287,6 +288,7 @@ defmodule Akvy.Stats do
     |> Enum.sort_by(&{-&1.executing, &1.node})
   end
 
+  @spec for_queue(Ecto.Queryable.t(), UUIDv7.t() | nil) :: Ecto.Query.t()
   defp for_queue(query, nil), do: query
   defp for_queue(query, queue_id), do: where(query, [t], t.queue_id == ^queue_id)
 end

@@ -25,7 +25,7 @@ defmodule Akvy.Tasks.Projector do
     end
   end
 
-  @doc "Applies the event to the struct (used when replaying history)."
+  @doc "Applies the event to the task struct; validates the transition like `project/2`."
   @spec apply_event(Task.t(), TaskEvent.t()) :: {:ok, Task.t()} | {:error, invalid_transition()}
   def apply_event(%Task{} = task, %TaskEvent{} = event) do
     with {:ok, changes} <- project(task, event) do
@@ -149,11 +149,14 @@ defmodule Akvy.Tasks.Projector do
 
   defp changes(_status, _task, _event), do: :error
 
+  @spec data(TaskEvent.t(), String.t()) :: term()
   defp data(%{data: data}, key), do: Map.get(data || %{}, key)
 
+  @spec diff_ms(DateTime.t(), DateTime.t() | nil) :: integer() | nil
   defp diff_ms(_to, nil), do: nil
   defp diff_ms(to, from), do: DateTime.diff(to, from, :millisecond)
 
+  @spec parse_datetime(DateTime.t() | String.t() | nil) :: DateTime.t() | nil
   defp parse_datetime(nil), do: nil
   defp parse_datetime(%DateTime{} = dt), do: dt
 

@@ -1,8 +1,7 @@
 defmodule Akvy.Tasks.LogBuffer do
   @moduledoc """
-  In-process buffer for task log lines. Lines are written with `insert_all` in
-  batches (every `@max_lines` lines or `@max_age_ms`) to avoid a transaction
-  per ffmpeg output line.
+  In-process buffer for task log lines. Lines are written in batches (every 200 lines
+  or 1 s) instead of one insert per ffmpeg output line.
   """
   alias Akvy.Tasks
   alias Akvy.Tasks.TaskLog
@@ -70,5 +69,6 @@ defmodule Akvy.Tasks.LogBuffer do
     %{buf | entries: [], count: 0, flushed_at: now()}
   end
 
+  @spec now() :: integer()
   defp now, do: System.monotonic_time(:millisecond)
 end

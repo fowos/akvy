@@ -58,5 +58,6 @@ defmodule Akvy.Storage.Local do
   @spec full_path(Akvy.Storage.key()) :: Path.t()
   def full_path(key), do: Path.join(root(), key)
 
+  @spec root() :: Path.t()
   defp root, do: Keyword.fetch!(Akvy.Storage.config(), :root)
 end

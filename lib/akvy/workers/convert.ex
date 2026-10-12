@@ -255,6 +255,7 @@ defmodule Akvy.Workers.Convert do
 
   defp queue_wait_ms(_job), do: nil
 
+  @spec file_size(Path.t()) :: non_neg_integer() | nil
   defp file_size(path) do
     case File.stat(path) do
       {:ok, %{size: size}} -> size

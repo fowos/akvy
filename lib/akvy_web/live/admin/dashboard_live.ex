@@ -376,6 +376,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
     %{summary: Akvy.Cluster.summary(live), nodes: online ++ Enum.sort_by(offline, & &1.instance)}
   end
 
+  @spec format_cpu(number() | nil) :: String.t()
   defp format_cpu(nil), do: "n/a"
   defp format_cpu(value), do: "#{round(value)}%"
 

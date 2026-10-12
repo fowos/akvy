@@ -149,6 +149,7 @@ defmodule Akvy.Accounts.UserToken do
     end
   end
 
+  @spec by_token_and_context_query(binary(), String.t()) :: Ecto.Query.t()
   defp by_token_and_context_query(token, context) do
     from UserToken, where: [token: ^token, context: ^context]
   end

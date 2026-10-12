@@ -50,6 +50,7 @@ defmodule Akvy.Accounts.UserNotifier do
     end
   end
 
+  @spec deliver_magic_link_instructions(User.t(), String.t()) :: delivery()
   defp deliver_magic_link_instructions(user, url) do
     deliver(user.email, "Log in instructions", """
 
@@ -67,6 +68,7 @@ defmodule Akvy.Accounts.UserNotifier do
     """)
   end
 
+  @spec deliver_confirmation_instructions(User.t(), String.t()) :: delivery()
   defp deliver_confirmation_instructions(user, url) do
     deliver(user.email, "Confirmation instructions", """
 

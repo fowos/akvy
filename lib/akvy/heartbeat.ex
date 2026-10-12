@@ -54,6 +54,7 @@ defmodule Akvy.Heartbeat do
     {:noreply, state}
   end
 
+  @spec do_beat(%{boot_id: Ecto.UUID.t()}) :: term()
   defp do_beat(state) do
     beat(state.boot_id, Akvy.Instance.id(), producer_uuid())
   rescue
@@ -70,5 +71,6 @@ defmodule Akvy.Heartbeat do
     end
   end
 
+  @spec dump_uuid(Ecto.UUID.t()) :: binary()
   defp dump_uuid(uuid), do: Ecto.UUID.dump!(uuid)
 end

@@ -51,5 +51,6 @@ defmodule Akvy.Storage do
   @spec config() :: keyword()
   def config, do: Application.get_env(:akvy, __MODULE__, [])
 
+  @spec adapter() :: module()
   defp adapter, do: Keyword.fetch!(config(), :adapter)
 end

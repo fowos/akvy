@@ -39,6 +39,7 @@ defmodule Akvy.Shutdown.HttpDrain do
   end
 
   # New conversions go to other instances from now on.
+  @spec pause_conversions() :: term()
   defp pause_conversions do
     Oban.pause_queue(queue: :convert, local_only: true)
   catch

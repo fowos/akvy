@@ -171,6 +171,7 @@ defmodule Akvy.Tasks do
     |> Repo.all()
   end
 
+  @spec filter_tasks(Ecto.Queryable.t(), map()) :: Ecto.Query.t()
   defp filter_tasks(query, filters) do
     Enum.reduce(filters, query, fn
       {:status, status}, q when status not in [nil, ""] -> where(q, [t], t.status == ^status)
@@ -361,6 +362,7 @@ defmodule Akvy.Tasks do
     end
   end
 
+  @spec event_row(TaskEvent.t()) :: map()
   defp event_row(%TaskEvent{} = event),
     do: Map.take(event, TaskEvent.__schema__(:fields))
 
@@ -380,6 +382,7 @@ defmodule Akvy.Tasks do
   end
 
   # Broadcasts every event with the snapshot as it was right after that event.
+  @spec broadcast_all(Task.t(), [TaskEvent.t()]) :: :ok
   defp broadcast_all(%Task{} = task, events) do
     Enum.reduce(events, task, fn event, task ->
       {:ok, task} = Projector.apply_event(task, event)

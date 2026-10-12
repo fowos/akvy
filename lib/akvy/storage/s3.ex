@@ -87,5 +87,6 @@ defmodule Akvy.Storage.S3 do
     end)
   end
 
+  @spec bucket() :: String.t()
   defp bucket, do: Keyword.fetch!(Akvy.Storage.config(), :bucket)
 end

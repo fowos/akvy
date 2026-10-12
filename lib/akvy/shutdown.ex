@@ -42,5 +42,6 @@ defmodule Akvy.Shutdown do
   @spec notify_streams() :: :ok
   def notify_streams, do: Phoenix.PubSub.local_broadcast(Akvy.PubSub, @topic, :akvy_shutdown)
 
+  @spec config() :: keyword()
   defp config, do: Application.get_env(:akvy, __MODULE__, [])
 end

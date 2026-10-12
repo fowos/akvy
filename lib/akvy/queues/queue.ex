@@ -71,6 +71,7 @@ defmodule Akvy.Queues.Queue do
     |> unique_constraint(:name)
   end
 
+  @spec validate_ffmpeg_args(Ecto.Changeset.t()) :: Ecto.Changeset.t()
   defp validate_ffmpeg_args(changeset) do
     validate_change(changeset, :ffmpeg_args, fn :ffmpeg_args, args ->
       case Akvy.FFmpeg.parse_template(args) do
@@ -80,11 +81,13 @@ defmodule Akvy.Queues.Queue do
     end)
   end
 
+  @spec normalize_extension(String.t() | nil) :: String.t() | nil
   defp normalize_extension(nil), do: nil
 
   defp normalize_extension(ext),
     do: ext |> String.trim() |> String.trim_leading(".") |> String.downcase()
 
+  @spec normalize_list([String.t()] | nil) :: [String.t()]
   defp normalize_list(nil), do: []
 
   defp normalize_list(list),

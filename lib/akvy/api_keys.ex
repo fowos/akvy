@@ -81,5 +81,6 @@ defmodule Akvy.ApiKeys do
     end
   end
 
+  @spec hash(String.t()) :: binary()
   defp hash(raw_key), do: :crypto.hash(:sha256, raw_key)
 end

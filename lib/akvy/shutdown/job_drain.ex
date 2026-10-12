@@ -84,6 +84,7 @@ defmodule Akvy.Shutdown.JobDrain do
     end
   end
 
+  @spec running() :: [pos_integer()]
   defp running do
     case Oban.check_queue(queue: :convert) do
       %{running: ids} -> ids
