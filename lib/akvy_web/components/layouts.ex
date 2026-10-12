@@ -56,73 +56,93 @@ defmodule AkvyWeb.Layouts do
   defp admin_shell(assigns) do
     ~H"""
     <div class="min-h-screen lg:flex">
-      <aside class="lg:fixed lg:inset-y-0 lg:w-60 flex flex-col border-b lg:border-b-0 lg:border-r border-base-300 bg-base-100">
-        <div class="flex items-center justify-between px-5 h-16">
+      <aside class="max-lg:sticky max-lg:top-0 max-lg:z-30 lg:fixed lg:inset-y-0 lg:w-60 flex flex-col border-b lg:border-b-0 lg:border-r border-base-300 bg-base-100">
+        <div class="flex items-center justify-between px-5 h-16 shrink-0">
           <.brand />
-          <div class="lg:hidden"><.theme_toggle /></div>
+          <button
+            id="admin-menu-toggle"
+            type="button"
+            class="lg:hidden group btn btn-ghost btn-sm btn-square"
+            aria-label="Menu"
+            aria-controls="admin-menu"
+            aria-expanded="false"
+            phx-click={toggle_admin_menu()}
+          >
+            <.icon name="hero-bars-3" class="size-6 group-aria-expanded:hidden" />
+            <.icon name="hero-x-mark" class="size-6 hidden group-aria-expanded:block" />
+          </button>
         </div>
 
-        <nav class="flex lg:flex-col gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden px-3 pb-3 lg:pb-0 lg:flex-1">
-          <.nav_link navigate={~p"/admin"} icon="hero-chart-bar-square" active={@active == :dashboard}>
-            Dashboard
-          </.nav_link>
+        <div
+          id="admin-menu"
+          class="max-lg:hidden flex flex-col lg:flex-1 lg:min-h-0 max-lg:max-h-[calc(100dvh-4rem)] max-lg:overflow-y-auto max-lg:border-t border-base-300"
+        >
+          <nav class="flex flex-col gap-1 px-3 py-3 lg:py-0 lg:flex-1 lg:overflow-y-auto">
+            <.nav_link
+              navigate={~p"/admin"}
+              icon="hero-chart-bar-square"
+              active={@active == :dashboard}
+            >
+              Dashboard
+            </.nav_link>
 
-          <.nav_link navigate={~p"/admin/tasks"} icon="hero-film" active={@active == :tasks}>
-            Tasks
-          </.nav_link>
+            <.nav_link navigate={~p"/admin/tasks"} icon="hero-film" active={@active == :tasks}>
+              Tasks
+            </.nav_link>
 
-          <.nav_link
-            navigate={~p"/admin/queues"}
-            icon="hero-queue-list"
-            active={@active == :queues}
-          >
-            Queues
-          </.nav_link>
+            <.nav_link
+              navigate={~p"/admin/queues"}
+              icon="hero-queue-list"
+              active={@active == :queues}
+            >
+              Queues
+            </.nav_link>
 
-          <.nav_link navigate={~p"/admin/api-keys"} icon="hero-key" active={@active == :api_keys}>
-            API keys
-          </.nav_link>
+            <.nav_link navigate={~p"/admin/api-keys"} icon="hero-key" active={@active == :api_keys}>
+              API keys
+            </.nav_link>
 
-          <.nav_link
-            navigate={~p"/admin/cluster"}
-            icon="hero-server-stack"
-            active={@active == :cluster}
-          >
-            Cluster
-          </.nav_link>
+            <.nav_link
+              navigate={~p"/admin/cluster"}
+              icon="hero-server-stack"
+              active={@active == :cluster}
+            >
+              Cluster
+            </.nav_link>
 
-          <div class="hidden lg:block my-3 border-t border-base-300"></div>
-          <.nav_link href={~p"/api/docs"} icon="hero-book-open" target="_blank">API docs</.nav_link>
-          <.nav_link href={~p"/admin/system"} icon="hero-cpu-chip">System</.nav_link>
-        </nav>
+            <div class="my-3 border-t border-base-300"></div>
+            <.nav_link href={~p"/api/docs"} icon="hero-book-open" target="_blank">API docs</.nav_link>
+            <.nav_link href={~p"/admin/system"} icon="hero-cpu-chip">System</.nav_link>
+          </nav>
 
-        <div class="hidden lg:block border-t border-base-300 p-4 space-y-3">
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="size-8 shrink-0 rounded-full bg-primary/15 text-primary grid place-items-center text-sm font-semibold uppercase">
-              {String.first(@current_scope.user.email)}
-            </div>
+          <div class="border-t border-base-300 p-4 space-y-3">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="size-8 shrink-0 rounded-full bg-primary/15 text-primary grid place-items-center text-sm font-semibold uppercase">
+                {String.first(@current_scope.user.email)}
+              </div>
 
-            <div class="min-w-0">
-              <p class="truncate text-sm font-medium">{@current_scope.user.email}</p>
+              <div class="min-w-0">
+                <p class="truncate text-sm font-medium">{@current_scope.user.email}</p>
 
-              <div class="flex gap-3 text-xs text-base-content/60">
-                <.link navigate={~p"/users/settings"} class="hover:text-base-content transition">
-                  Settings
-                </.link>
+                <div class="flex gap-3 text-xs text-base-content/60">
+                  <.link navigate={~p"/users/settings"} class="hover:text-base-content transition">
+                    Settings
+                  </.link>
 
-                <.link
-                  href={~p"/users/log-out"}
-                  method="delete"
-                  class="hover:text-base-content transition"
-                >
-                  Log out
-                </.link>
+                  <.link
+                    href={~p"/users/log-out"}
+                    method="delete"
+                    class="hover:text-base-content transition"
+                  >
+                    Log out
+                  </.link>
+                </div>
               </div>
             </div>
-          </div>
 
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-base-content/50">Theme</span> <.theme_toggle />
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-base-content/50">Theme</span> <.theme_toggle />
+            </div>
           </div>
         </div>
       </aside>
@@ -135,6 +155,12 @@ defmodule AkvyWeb.Layouts do
     </div>
     <.flash_group flash={@flash} />
     """
+  end
+
+  # Below `lg` the sidebar collapses into a dropdown under the top bar.
+  defp toggle_admin_menu do
+    JS.toggle_class("max-lg:hidden", to: "#admin-menu")
+    |> JS.toggle_attribute({"aria-expanded", "true", "false"}, to: "#admin-menu-toggle")
   end
 
   attr :class, :any, default: nil

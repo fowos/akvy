@@ -270,7 +270,10 @@ defmodule AkvyWeb.CoreComponents do
   @spec header(map()) :: Phoenix.LiveView.Rendered.t()
   def header(assigns) do
     ~H"""
-    <header class={[@actions != [] && "flex items-center justify-between gap-6", "pb-4"]}>
+    <header class={[
+      @actions != [] && "flex flex-wrap items-center justify-between gap-x-6 gap-y-3",
+      "pb-4"
+    ]}>
       <div>
         <h1 class="text-lg font-semibold leading-8">
           {render_slot(@inner_block)}
