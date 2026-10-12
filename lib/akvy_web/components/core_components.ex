@@ -398,29 +398,44 @@ defmodule AkvyWeb.CoreComponents do
 
   ## JS Commands
 
+  # `JS.t()` is opaque, so the 1-arity versions let `JS` build the struct instead of
+  # defaulting to a `%JS{}` literal.
+
   @doc "Shows the element matching `selector` with a fade/scale-in transition."
+  @spec show(String.t()) :: JS.t()
+  def show(selector), do: JS.show(show_opts(selector))
+
   @spec show(JS.t(), String.t()) :: JS.t()
-  def show(js \\ %JS{}, selector) do
-    JS.show(js,
+  def show(js, selector), do: JS.show(js, show_opts(selector))
+
+  @doc "Hides the element matching `selector` with a fade/scale-out transition."
+  @spec hide(String.t()) :: JS.t()
+  def hide(selector), do: JS.hide(hide_opts(selector))
+
+  @spec hide(JS.t(), String.t()) :: JS.t()
+  def hide(js, selector), do: JS.hide(js, hide_opts(selector))
+
+  @spec show_opts(String.t()) :: keyword()
+  defp show_opts(selector) do
+    [
       to: selector,
       time: 300,
       transition:
         {"transition-all ease-out duration-300",
          "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95",
          "opacity-100 translate-y-0 sm:scale-100"}
-    )
+    ]
   end
 
-  @doc "Hides the element matching `selector` with a fade/scale-out transition."
-  @spec hide(JS.t(), String.t()) :: JS.t()
-  def hide(js \\ %JS{}, selector) do
-    JS.hide(js,
+  @spec hide_opts(String.t()) :: keyword()
+  defp hide_opts(selector) do
+    [
       to: selector,
       time: 200,
       transition:
         {"transition-all ease-in duration-200", "opacity-100 translate-y-0 sm:scale-100",
          "opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"}
-    )
+    ]
   end
 
   @doc """
