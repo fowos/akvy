@@ -167,7 +167,7 @@ defmodule AkvyWeb.Admin.TaskLive.Index do
           Tasks appear here as clients upload files.
         </.empty_state>
 
-        <div :if={!@empty?} class="overflow-x-auto">
+        <div :if={!@empty?} class="relative overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-base-200/50 text-xs text-base-content/50">
               <tr>

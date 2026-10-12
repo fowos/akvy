@@ -46,7 +46,7 @@ defmodule AkvyWeb.Admin.QueueLive.Index do
         <.empty_state :if={@empty?} id="queues-empty" icon="hero-queue-list" title="No queues yet">
           A queue defines the ffmpeg command applied to uploaded files.
         </.empty_state>
-        <div :if={!@empty?} class="overflow-x-auto">
+        <div :if={!@empty?} class="relative overflow-x-auto">
           <table class="w-full text-sm">
             <thead class="bg-base-200/50 text-xs text-base-content/50">
               <tr>

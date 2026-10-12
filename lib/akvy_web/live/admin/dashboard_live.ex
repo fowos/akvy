@@ -184,7 +184,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
               </.link>
             </.empty_state>
           <% else %>
-            <div class="overflow-x-auto">
+            <div class="relative overflow-x-auto">
               <table id="dashboard-queues" class="w-full text-sm">
                 <thead class="bg-base-200/50 text-xs text-base-content/50">
                   <tr>
