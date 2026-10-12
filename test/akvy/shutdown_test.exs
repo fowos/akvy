@@ -2,6 +2,8 @@ defmodule Akvy.ShutdownTest do
   # Toggles the global draining flag.
   use AkvyWeb.ConnCase, async: false
 
+  @moduletag :capture_log
+
   import Akvy.ConversionFixtures
   import Ecto.Query
 

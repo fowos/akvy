@@ -1,6 +1,8 @@
 defmodule Akvy.Workers.RescueOrphansTest do
   use Akvy.DataCase, async: true
 
+  @moduletag :capture_log
+
   import Akvy.ConversionFixtures
 
   alias Akvy.{Heartbeat, Repo, Tasks}
