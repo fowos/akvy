@@ -70,12 +70,10 @@ defmodule Akvy.Recovery do
     result =
       case task_id && Tasks.get_task(task_id) do
         %Task{status: :processing} = task ->
-          with {:ok, task, _} <- Tasks.record_fresh(task, :attempt_failed, data: data) do
-            finish_attempt(task, reason, retry?, next_attempt)
-          end
+          finish_attempt(task, [{:attempt_failed, data: data}], reason, retry?, next_attempt)
 
         %Task{status: status} = task when status in [:uploaded, :retrying] and not retry? ->
-          finish_attempt(task, reason, false, next_attempt)
+          finish_attempt(task, [], reason, false, next_attempt)
 
         _ ->
           :ok
@@ -88,14 +86,17 @@ defmodule Akvy.Recovery do
     :ok
   end
 
-  @spec finish_attempt(Task.t(), String.t(), boolean(), pos_integer()) :: :ok | {:error, term()}
-  defp finish_attempt(task, _reason, true, next_attempt) do
-    data = %{"next_attempt" => next_attempt}
-    with {:ok, _task, _} <- Tasks.record_fresh(task, :retry_scheduled, data: data), do: :ok
+  @spec finish_attempt(Task.t(), [Tasks.event_spec()], String.t(), boolean(), pos_integer()) ::
+          :ok | {:error, term()}
+  defp finish_attempt(task, events, _reason, true, next_attempt) do
+    retry = {:retry_scheduled, data: %{"next_attempt" => next_attempt}}
+    with {:ok, _task, _} <- Tasks.record_all_fresh(task, events ++ [retry]), do: :ok
   end
 
-  defp finish_attempt(task, reason, false, _next_attempt) do
-    with {:ok, task, _} <- Tasks.record_fresh(task, :failed, data: %{"error" => reason}),
+  defp finish_attempt(task, events, reason, false, _next_attempt) do
+    failed = {:failed, data: %{"error" => reason}}
+
+    with {:ok, task, _} <- Tasks.record_all_fresh(task, events ++ [failed]),
          {:ok, _task} <- Tasks.delete_input(task) do
       :ok
     end

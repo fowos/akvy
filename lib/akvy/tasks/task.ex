@@ -7,7 +7,18 @@ defmodule Akvy.Tasks.Task do
   """
   use Akvy.Schema
 
-  @statuses ~w(uploaded processing retrying completed downloading failed downloaded expired cancelled)a
+  # Stored as smallint. Codes must never change; add new statuses with new codes.
+  @statuses [
+    uploaded: 1,
+    processing: 2,
+    retrying: 3,
+    completed: 4,
+    downloading: 5,
+    failed: 6,
+    downloaded: 7,
+    expired: 8,
+    cancelled: 9
+  ]
   @terminal ~w(failed downloaded expired cancelled)a
   @active ~w(uploaded processing retrying)a
 
@@ -28,6 +39,7 @@ defmodule Akvy.Tasks.Task do
           version: non_neg_integer(),
           attempt: non_neg_integer(),
           node: String.t() | nil,
+          job_id: pos_integer() | nil,
           original_filename: String.t() | nil,
           content_type: String.t() | nil,
           input_key: String.t() | nil,
@@ -63,6 +75,7 @@ defmodule Akvy.Tasks.Task do
     field :version, :integer, default: 0
     field :attempt, :integer, default: 0
     field :node, :string
+    field :job_id, :integer
     field :original_filename, :string
     field :content_type, :string
     field :input_key, :string
@@ -96,7 +109,7 @@ defmodule Akvy.Tasks.Task do
 
   @doc "All task statuses."
   @spec statuses() :: [status()]
-  def statuses, do: @statuses
+  def statuses, do: Keyword.keys(@statuses)
 
   @doc "Statuses after which nothing else will happen to the task."
   @spec terminal_statuses() :: [status()]

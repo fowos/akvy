@@ -61,8 +61,8 @@ defmodule Akvy.Tasks.Projector do
      }}
   end
 
-  defp changes(status, _task, %{type: :enqueued}) when status in [:uploaded, :retrying],
-    do: {:ok, %{}}
+  defp changes(status, _task, %{type: :enqueued} = e) when status in [:uploaded, :retrying],
+    do: {:ok, %{job_id: data(e, "job_id")}}
 
   defp changes(status, _task, %{type: :attempt_started} = e) when status in @processing_from do
     {:ok,

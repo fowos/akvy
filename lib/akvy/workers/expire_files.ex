@@ -78,14 +78,12 @@ defmodule Akvy.Workers.ExpireFiles do
   @spec fail_orphans(DateTime.t()) :: :ok
   defp fail_orphans(now) do
     threshold = DateTime.add(now, -@orphan_after_seconds, :second)
-    worker = inspect(Akvy.Workers.Convert)
 
     live_job =
       from j in Oban.Job,
         where:
-          j.worker == ^worker and
-            j.state in ["available", "scheduled", "executing", "retryable"] and
-            fragment("?->>'task_id'", j.args) == type(parent_as(:task).id, :string)
+          j.id == parent_as(:task).job_id and
+            j.state in ["available", "scheduled", "executing", "retryable"]
 
     from(t in Task,
       as: :task,

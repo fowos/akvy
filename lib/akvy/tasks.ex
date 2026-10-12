@@ -54,6 +54,11 @@ defmodule Akvy.Tasks do
 
   @type record_result :: {:ok, Task.t(), TaskEvent.t()} | {:error, record_error()}
 
+  @typedoc "Event for `record_all/2`: a type, or a type with `t:record_option/0`s."
+  @type event_spec :: TaskEvent.type() | {TaskEvent.type(), [record_option()]}
+
+  @type record_all_result :: {:ok, Task.t(), [TaskEvent.t()]} | {:error, record_error()}
+
   @typedoc "Log line for `insert_logs/2`; `:line`, `:level` and `:at` are optional."
   @type log_entry :: %{
           required(:attempt) => non_neg_integer(),
@@ -116,6 +121,20 @@ defmodule Akvy.Tasks do
     case UUIDv7.cast(id) do
       {:ok, id} -> Repo.get(Task, id)
       :error -> nil
+    end
+  end
+
+  @doc "Fetches a task with its queue in one query; nil for unknown or malformed ids."
+  @spec get_task_with_queue(term()) :: Task.t() | nil
+  def get_task_with_queue(id) do
+    case UUIDv7.cast(id) do
+      {:ok, id} ->
+        Repo.one(
+          from t in Task, join: q in assoc(t, :queue), where: t.id == ^id, preload: [queue: q]
+        )
+
+      :error ->
+        nil
     end
   end
 
@@ -212,7 +231,7 @@ defmodule Akvy.Tasks do
     with :ok <- result,
          {:ok, {task, events}} <-
            insert_task(id, queue, api_key, upload, input_key, size, upload_ms) do
-      Enum.each(events, &broadcast(task, &1))
+      broadcast_all(%Task{id: id}, events)
       {:ok, task}
     else
       {:error, reason} = error ->
@@ -233,23 +252,6 @@ defmodule Akvy.Tasks do
         ) :: {:ok, {Task.t(), [TaskEvent.t()]}} | {:error, term()}
   defp insert_task(id, queue, api_key, upload, input_key, size, upload_ms) do
     Repo.transaction(fn ->
-      uploaded =
-        build_event(%Task{id: id, version: 0}, :uploaded,
-          duration_ms: upload_ms,
-          data: %{
-            "queue_id" => queue.id,
-            "api_key_id" => api_key && api_key.id,
-            "original_filename" => upload[:filename],
-            "content_type" => upload[:content_type],
-            "input_key" => input_key,
-            "input_size" => size
-          }
-        )
-
-      {:ok, changes} = Projector.project(%Task{id: id}, uploaded)
-      task = Repo.insert!(struct(%Task{id: id}, changes))
-      Repo.insert!(uploaded)
-
       job =
         Oban.insert!(
           Convert.new(%{"task_id" => id},
@@ -258,10 +260,24 @@ defmodule Akvy.Tasks do
           )
         )
 
-      case apply_event(task, :enqueued, data: %{"job_id" => job.id}) do
-        {:ok, task, enqueued} -> {task, [uploaded, enqueued]}
-        {:error, reason} -> Repo.rollback(reason)
-      end
+      uploaded =
+        {:uploaded,
+         duration_ms: upload_ms,
+         data: %{
+           "queue_id" => queue.id,
+           "api_key_id" => api_key && api_key.id,
+           "original_filename" => upload[:filename],
+           "content_type" => upload[:content_type],
+           "input_key" => input_key,
+           "input_size" => size
+         }}
+
+      {:ok, task, events} =
+        project(%Task{id: id}, [uploaded, {:enqueued, data: %{"job_id" => job.id}}])
+
+      task = Repo.insert!(task)
+      Repo.insert_all(TaskEvent, Enum.map(events, &event_row/1))
+      {task, events}
     end)
   end
 
@@ -276,51 +292,77 @@ defmodule Akvy.Tasks do
   """
   @spec record(Task.t(), TaskEvent.type(), [record_option()]) :: record_result()
   def record(%Task{} = task, type, opts \\ []) do
-    case Repo.transaction(fn ->
-           case apply_event(task, type, opts) do
-             {:ok, task, event} -> {task, event}
-             {:error, reason} -> Repo.rollback(reason)
-           end
-         end) do
-      {:ok, {task, event}} ->
-        broadcast(task, event)
-        {:ok, task, event}
-
-      {:error, _} = error ->
-        error
-    end
+    with {:ok, task, [event]} <- record_all(task, [{type, opts}]), do: {:ok, task, event}
   end
 
   @doc "Like `record/3`, but reloads the task and retries once on a stale version."
   @spec record_fresh(Task.t(), TaskEvent.type(), [record_option()]) :: record_result()
   def record_fresh(%Task{} = task, type, opts \\ []) do
-    case record(task, type, opts) do
-      {:error, :stale} -> record(get_task!(task.id), type, opts)
+    with {:ok, task, [event]} <- record_all_fresh(task, [{type, opts}]), do: {:ok, task, event}
+  end
+
+  @doc """
+  Records consecutive events in one transaction, e.g. the end of one stage and the
+  start of the next. Each event is broadcast; either all of them are written or none.
+  """
+  @spec record_all(Task.t(), [event_spec()]) :: record_all_result()
+  def record_all(%Task{} = task, specs) do
+    with {:ok, updated, events} <- project(task, specs),
+         {:ok, updated} <- Repo.transaction(fn -> write(task, updated, events) end) do
+      broadcast_all(task, events)
+      {:ok, updated, events}
+    end
+  end
+
+  @doc "Like `record_all/2`, but reloads the task and retries once on a stale version."
+  @spec record_all_fresh(Task.t(), [event_spec()]) :: record_all_result()
+  def record_all_fresh(%Task{} = task, specs) do
+    case record_all(task, specs) do
+      {:error, :stale} -> record_all(get_task!(task.id), specs)
       other -> other
     end
   end
 
-  @spec apply_event(Task.t(), TaskEvent.type(), [record_option()]) :: record_result()
-  defp apply_event(%Task{} = task, type, opts) do
-    event = build_event(task, type, opts)
+  # Applies the events in memory; returns the resulting snapshot and the events.
+  @spec project(Task.t(), [event_spec()]) ::
+          {:ok, Task.t(), [TaskEvent.t()]} | {:error, Projector.invalid_transition()}
+  defp project(%Task{} = task, specs) do
+    Enum.reduce_while(specs, {:ok, task, []}, fn spec, {:ok, task, events} ->
+      {type, opts} = if is_atom(spec), do: {spec, []}, else: spec
 
-    with {:ok, changes} <- Projector.project(task, event) do
-      now = DateTime.utc_now()
-      set = changes |> Map.put(:updated_at, now) |> Enum.to_list()
+      event = build_event(task, type, opts)
 
-      query =
-        from t in Task, where: t.id == ^task.id and t.version == ^task.version, select: t
-
-      case Repo.update_all(query, set: set) do
-        {1, [updated]} ->
-          event = Repo.insert!(event)
-          {:ok, updated, event}
-
-        {0, _} ->
-          {:error, :stale}
+      case Projector.apply_event(task, event) do
+        {:ok, task} -> {:cont, {:ok, task, events ++ [event]}}
+        error -> {:halt, error}
       end
+    end)
+  end
+
+  # Updates the changed snapshot fields, guarded by the version the events were built on.
+  @spec write(Task.t(), Task.t(), [TaskEvent.t()]) :: Task.t()
+  defp write(%Task{} = task, %Task{} = updated, events) do
+    now = DateTime.utc_now()
+
+    changes =
+      for field <- Task.__schema__(:fields),
+          Map.get(task, field) != Map.get(updated, field),
+          do: {field, Map.get(updated, field)}
+
+    query = from t in Task, where: t.id == ^task.id and t.version == ^task.version
+
+    case Repo.update_all(query, set: [{:updated_at, now} | changes]) do
+      {1, _} ->
+        Repo.insert_all(TaskEvent, Enum.map(events, &event_row/1))
+        %{updated | updated_at: now}
+
+      {0, _} ->
+        Repo.rollback(:stale)
     end
   end
+
+  defp event_row(%TaskEvent{} = event),
+    do: Map.take(event, TaskEvent.__schema__(:fields))
 
   @spec build_event(Task.t(), TaskEvent.type(), [record_option()]) :: TaskEvent.t()
   defp build_event(%Task{} = task, type, opts) do
@@ -337,10 +379,15 @@ defmodule Akvy.Tasks do
     }
   end
 
-  defp broadcast(%Task{} = task, %TaskEvent{} = event) do
-    task
-    |> notification_payload(event)
-    |> broadcast_payload()
+  # Broadcasts every event with the snapshot as it was right after that event.
+  defp broadcast_all(%Task{} = task, events) do
+    Enum.reduce(events, task, fn event, task ->
+      {:ok, task} = Projector.apply_event(task, event)
+      task |> notification_payload(event) |> broadcast_payload()
+      task
+    end)
+
+    :ok
   end
 
   @doc "Compact, JSON-friendly notification sent to subscribers and SSE clients."
@@ -402,11 +449,7 @@ defmodule Akvy.Tasks do
   @spec cancel_task(Task.t()) :: {:ok, Task.t()} | {:error, term()}
   def cancel_task(%Task{} = task) do
     with {:ok, task, _} <- record_fresh(task, :cancelled) do
-      Oban.cancel_all_jobs(
-        from(j in Oban.Job,
-          where: j.worker == ^inspect(Convert) and fragment("?->>'task_id'", j.args) == ^task.id
-        )
-      )
+      Oban.cancel_all_jobs(from(j in Oban.Job, where: j.id == ^task.job_id))
 
       with {:ok, task} <- delete_input(task), do: delete_output(task)
     end

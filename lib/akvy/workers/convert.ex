@@ -10,7 +10,7 @@ defmodule Akvy.Workers.Convert do
 
   require Logger
 
-  alias Akvy.{FFmpeg, Queues, Storage, Tasks}
+  alias Akvy.{FFmpeg, Storage, Tasks}
   alias Akvy.Tasks.{LogBuffer, Task}
 
   # Extra time on top of the ffmpeg timeout for S3 transfers.
@@ -24,13 +24,12 @@ defmodule Akvy.Workers.Convert do
 
   @impl Oban.Worker
   def perform(%Oban.Job{args: %{"task_id" => task_id}} = job) do
-    case Tasks.get_task(task_id) do
+    case Tasks.get_task_with_queue(task_id) do
       nil ->
         {:cancel, :task_not_found}
 
       %Task{status: status} = task when status in [:uploaded, :retrying, :processing] ->
-        queue = Queues.get_queue!(task.queue_id)
-        run(task, queue, job)
+        run(task, task.queue, job)
 
       %Task{status: status} ->
         {:cancel, {:unexpected_status, status}}
@@ -43,24 +42,26 @@ defmodule Akvy.Workers.Convert do
     work_dir = Path.join(Application.fetch_env!(:akvy, :work_dir), "#{task.id}-#{job.attempt}")
 
     try do
-      wait_ms = queue_wait_ms(job)
-      task = record!(task, :attempt_started, attempt: job.attempt, duration_ms: wait_ms)
+      started = {:attempt_started, attempt: job.attempt, duration_ms: queue_wait_ms(job)}
       logs = LogBuffer.new(task.id, job.attempt)
 
-      case File.mkdir_p(work_dir) do
-        :ok ->
-          :ok
+      task =
+        case File.mkdir_p(work_dir) do
+          :ok ->
+            record!(task, [started, :s3_download_started])
 
-        {:error, reason} ->
-          fail!(task, logs, "cannot create #{work_dir}: #{:file.format_error(reason)}", %{
-            "stage" => "work_dir"
-          })
-      end
+          {:error, reason} ->
+            fail!(
+              record!(task, [started]),
+              logs,
+              "cannot create #{work_dir}: #{:file.format_error(reason)}",
+              %{
+                "stage" => "work_dir"
+              }
+            )
+        end
 
       {task, logs} = convert(task, queue, work_dir, logs)
-
-      expires_at = DateTime.add(DateTime.utc_now(), queue.result_ttl_seconds, :second)
-      task = record!(task, :completed, data: %{"expires_at" => DateTime.to_iso8601(expires_at)})
 
       # Log flush and cleanup run after `completed` so the client is not kept waiting.
       # A failed cleanup is retried by Akvy.Workers.ExpireFiles; it must not fail the task.
@@ -92,6 +93,8 @@ defmodule Akvy.Workers.Convert do
     end
   end
 
+  # Runs the stages and records `completed`. Expects `s3_download_started` to be recorded.
+  # The end of a stage and the start of the next one are recorded together.
   @spec convert(Task.t(), Akvy.Queues.Queue.t(), Path.t(), LogBuffer.t()) ::
           {Task.t(), LogBuffer.t()}
   defp convert(task, queue, work_dir, logs) do
@@ -99,22 +102,21 @@ defmodule Akvy.Workers.Convert do
     output_path = Path.join(work_dir, "output.#{queue.output_extension}")
 
     # 1. S3 -> local
-    task = record!(task, :s3_download_started)
     {ms, result} = Tasks.timed(fn -> Storage.download_to(task.input_key, input_path) end)
 
     if result != :ok do
       fail!(task, logs, "S3 download failed: #{inspect(result)}", %{"stage" => "s3_download"})
     end
 
-    task =
-      record!(task, :s3_download_finished,
-        duration_ms: ms,
-        data: %{"bytes" => file_size(input_path)}
-      )
-
     # 2. ffmpeg
     {:ok, argv} = FFmpeg.build_argv(queue.ffmpeg_args, input_path, output_path)
-    task = record!(task, :ffmpeg_started, data: %{"argv" => argv})
+
+    task =
+      record!(task, [
+        {:s3_download_finished, duration_ms: ms, data: %{"bytes" => file_size(input_path)}},
+        {:ffmpeg_started, data: %{"argv" => argv}}
+      ])
+
     logs = LogBuffer.add(logs, :worker, :info, "ffmpeg " <> Enum.join(argv, " "))
 
     {ms, result} =
@@ -129,11 +131,19 @@ defmodule Akvy.Workers.Convert do
     {task, logs} =
       case result do
         {:ok, logs} ->
-          {record!(task, :ffmpeg_finished, duration_ms: ms, data: %{"exit_code" => 0}), logs}
+          finished = {:ffmpeg_finished, duration_ms: ms, data: %{"exit_code" => 0}}
+
+          if File.exists?(output_path) do
+            {record!(task, [finished, :s3_upload_started]), logs}
+          else
+            fail!(record!(task, [finished]), logs, "ffmpeg produced no output file", %{
+              "stage" => "ffmpeg"
+            })
+          end
 
         {:error, {:exit_status, code}, logs} ->
           task =
-            record!(task, :ffmpeg_finished, duration_ms: ms, data: %{"exit_code" => code})
+            record!(task, [{:ffmpeg_finished, duration_ms: ms, data: %{"exit_code" => code}}])
 
           fail!(task, logs, "ffmpeg exited with status #{code}", %{
             "stage" => "ffmpeg",
@@ -141,7 +151,7 @@ defmodule Akvy.Workers.Convert do
           })
 
         {:error, :timeout, logs} ->
-          task = record!(task, :ffmpeg_finished, duration_ms: ms, data: %{"timeout" => true})
+          task = record!(task, [{:ffmpeg_finished, duration_ms: ms, data: %{"timeout" => true}}])
 
           fail!(task, logs, "ffmpeg timed out after #{queue.timeout_seconds}s", %{
             "stage" => "ffmpeg"
@@ -151,13 +161,8 @@ defmodule Akvy.Workers.Convert do
           fail!(task, logs, "ffmpeg executable not found", %{"stage" => "ffmpeg"})
       end
 
-    unless File.exists?(output_path) do
-      fail!(task, logs, "ffmpeg produced no output file", %{"stage" => "ffmpeg"})
-    end
-
     # 3. local -> S3
     output_key = "outputs/#{task.id}.#{queue.output_extension}"
-    task = record!(task, :s3_upload_started)
 
     {ms, result} =
       Tasks.timed(fn ->
@@ -168,11 +173,15 @@ defmodule Akvy.Workers.Convert do
       fail!(task, logs, "S3 upload failed: #{inspect(result)}", %{"stage" => "s3_upload"})
     end
 
+    expires_at = DateTime.add(DateTime.utc_now(), queue.result_ttl_seconds, :second)
+
     task =
-      record!(task, :s3_upload_finished,
-        duration_ms: ms,
-        data: %{"output_key" => output_key, "output_size" => file_size(output_path)}
-      )
+      record!(task, [
+        {:s3_upload_finished,
+         duration_ms: ms,
+         data: %{"output_key" => output_key, "output_size" => file_size(output_path)}},
+        {:completed, data: %{"expires_at" => DateTime.to_iso8601(expires_at)}}
+      ])
 
     {task, logs}
   end
@@ -181,13 +190,13 @@ defmodule Akvy.Workers.Convert do
           {:error, String.t()} | {:cancel, String.t()}
   defp handle_failure(task, job, reason, data) do
     data = Map.put(data, "error", reason)
-    task = record!(task, :attempt_failed, data: data)
+    failed = {:attempt_failed, data: data}
 
     if job.attempt < job.max_attempts do
-      record!(task, :retry_scheduled, data: %{"next_attempt" => job.attempt + 1})
+      record!(task, [failed, {:retry_scheduled, data: %{"next_attempt" => job.attempt + 1}}])
       {:error, reason}
     else
-      task = record!(task, :failed, data: %{"error" => reason})
+      task = record!(task, [failed, {:failed, data: %{"error" => reason}}])
 
       case Tasks.delete_input(task) do
         {:ok, _} ->
@@ -211,7 +220,7 @@ defmodule Akvy.Workers.Convert do
 
       %Task{status: status} = task
       when status in [:uploaded, :retrying] and job.attempt >= job.max_attempts ->
-        record!(task, :failed, data: %{"error" => reason})
+        record!(task, [{:failed, data: %{"error" => reason}}])
         {:cancel, reason}
 
       _ ->
@@ -229,11 +238,11 @@ defmodule Akvy.Workers.Convert do
 
   # Any write conflict means the task was changed elsewhere (e.g. cancelled):
   # stop processing instead of overwriting.
-  @spec record!(Task.t(), Akvy.Tasks.TaskEvent.type(), keyword()) :: Task.t()
-  defp record!(task, type, opts \\ []) do
-    case Tasks.record(task, type, opts) do
-      {:ok, task, _event} -> task
-      {:error, reason} -> throw({:abort, {:task_changed, type, reason}})
+  @spec record!(Task.t(), [Tasks.event_spec()]) :: Task.t()
+  defp record!(task, events) do
+    case Tasks.record_all(task, events) do
+      {:ok, task, _events} -> task
+      {:error, reason} -> throw({:abort, {:task_changed, reason}})
     end
   end
 

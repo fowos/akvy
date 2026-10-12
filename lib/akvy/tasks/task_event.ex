@@ -5,10 +5,29 @@ defmodule Akvy.Tasks.TaskEvent do
   """
   use Akvy.Schema
 
-  @types ~w(uploaded enqueued attempt_started s3_download_started s3_download_finished
-            ffmpeg_started ffmpeg_finished s3_upload_started s3_upload_finished attempt_failed
-            retry_scheduled completed failed input_deleted download_started download_aborted
-            downloaded output_deleted expired cancelled)a
+  # Stored as smallint. Codes must never change; add new types with new codes.
+  @types [
+    uploaded: 1,
+    enqueued: 2,
+    attempt_started: 3,
+    s3_download_started: 4,
+    s3_download_finished: 5,
+    ffmpeg_started: 6,
+    ffmpeg_finished: 7,
+    s3_upload_started: 8,
+    s3_upload_finished: 9,
+    attempt_failed: 10,
+    retry_scheduled: 11,
+    completed: 12,
+    failed: 13,
+    input_deleted: 14,
+    download_started: 15,
+    download_aborted: 16,
+    downloaded: 17,
+    output_deleted: 18,
+    expired: 19,
+    cancelled: 20
+  ]
 
   @type type ::
           :uploaded
@@ -59,5 +78,5 @@ defmodule Akvy.Tasks.TaskEvent do
 
   @doc "All event types."
   @spec types() :: [type()]
-  def types, do: @types
+  def types, do: Keyword.keys(@types)
 end

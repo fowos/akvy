@@ -43,6 +43,38 @@ defmodule Akvy.TasksTest do
     end
   end
 
+  describe "record_all/2" do
+    test "writes consecutive events and broadcasts each with its own status" do
+      task = task_fixture()
+      Tasks.subscribe_task(task.id)
+
+      assert {:ok, task, [_, _]} =
+               Tasks.record_all(task, [{:attempt_started, attempt: 1}, :s3_download_started])
+
+      assert task.status == :processing
+      assert task.version == 4
+
+      assert Tasks.get_task!(task.id) |> Map.take([:status, :version, :attempt]) ==
+               Map.take(task, [:status, :version, :attempt])
+
+      assert [_, _, %{type: :attempt_started, seq: 3}, %{type: :s3_download_started, seq: 4}] =
+               Tasks.list_events(task.id)
+
+      assert_receive {:akvy_task, %{"event" => "attempt_started", "status" => "processing"}}
+      assert_receive {:akvy_task, %{"event" => "s3_download_started", "seq" => 4}}
+    end
+
+    test "writes nothing when any event is not allowed" do
+      task = task_fixture()
+
+      assert {:error, {:invalid_transition, :processing, :downloaded}} =
+               Tasks.record_all(task, [{:attempt_started, attempt: 1}, :downloaded])
+
+      assert Tasks.get_task!(task.id).version == task.version
+      assert length(Tasks.list_events(task.id)) == 2
+    end
+  end
+
   test "rebuild_snapshot/1 reproduces the live snapshot from history" do
     task = completed_task_fixture()
 
