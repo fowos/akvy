@@ -128,6 +128,8 @@ Every instance uses the same values.
 | `CLUSTER_ENABLED` | `true` | set `false` to run nodes without clustering |
 | `AUTO_MIGRATE` | `true` | run migrations on boot |
 | `POOL_SIZE` | `10` | DB connections per instance |
+| `SHUTDOWN_DRAIN_SECONDS` | `5` | time `/health` returns 503 before HTTP stops |
+| `SHUTDOWN_JOBS_SECONDS` | `30` | time running conversions get to finish on shutdown |
 
 Upload size limits, the ffmpeg command, timeouts, attempts and retention are set **per queue**
 in the admin panel.
@@ -157,4 +159,21 @@ docker compose exec akvy-1 bin/akvy eval 'Akvy.Release.create_admin("admin@examp
   `RELEASE_COOKIE`. Keep these ports on a private network.
 - For SSE, raise the proxy read timeout and disable response buffering. The service
   sends `X-Accel-Buffering: no` and a ping every 15 seconds.
-- `GET /health` checks the database and can be used as the readiness probe.
+- `GET /health` checks the database and can be used as the readiness probe. It returns
+  503 while the instance is shutting down.
+
+### Graceful shutdown
+
+On SIGTERM (`docker stop`) an instance:
+
+1. returns 503 from `/health` and stops taking conversions for `SHUTDOWN_DRAIN_SECONDS`,
+   so the load balancer removes it (the health check interval must be shorter);
+2. closes SSE streams, so clients reconnect to another instance, and stops HTTP
+   (in-flight requests get up to 15 s);
+3. waits up to `SHUTDOWN_JOBS_SECONDS` for running conversions, then hands the rest to
+   other instances without spending an attempt and releases its downloads.
+
+The container stop timeout must cover the whole sequence:
+`SHUTDOWN_DRAIN_SECONDS + 15 + SHUTDOWN_JOBS_SECONDS + 2` seconds (`stop_grace_period: 60s`
+in `compose.yaml`; Docker's default is 10 s). Long conversions are not waited for:
+they restart on another instance.

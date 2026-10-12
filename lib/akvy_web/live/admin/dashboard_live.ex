@@ -114,7 +114,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
       </div>
 
       <div class="mt-6 grid gap-6 lg:grid-cols-5">
-        <.card title="Throughput" class="lg:col-span-3">
+        <.card title="Throughput" class="flex flex-col lg:col-span-3">
           <:actions>
             <span class="flex items-center gap-3 text-xs text-base-content/60">
               <span class="flex items-center gap-1">
@@ -126,8 +126,8 @@ defmodule AkvyWeb.Admin.DashboardLive do
             </span>
           </:actions>
 
-          <div class="p-5">
-            <.throughput_chart id="throughput-chart" rows={@overview.throughput} />
+          <div class="flex flex-1 flex-col p-5">
+            <.throughput_chart id="throughput-chart" class="flex-1" rows={@overview.throughput} />
           </div>
         </.card>
 

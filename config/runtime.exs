@@ -52,6 +52,12 @@ if config_env() != :test do
     String.to_integer(System.get_env("FFMPEG_CONCURRENCY") || "#{System.schedulers_online()}")
 
   config :akvy, Oban, queues: [convert: ffmpeg_concurrency, maintenance: 1]
+
+  # Graceful shutdown budget (see Akvy.Shutdown). Keep the container stop timeout above
+  # SHUTDOWN_DRAIN_SECONDS + 15 s (HTTP) + SHUTDOWN_JOBS_SECONDS + 2 s.
+  config :akvy, Akvy.Shutdown,
+    drain_ms: String.to_integer(System.get_env("SHUTDOWN_DRAIN_SECONDS", "5")) * 1000,
+    jobs_ms: String.to_integer(System.get_env("SHUTDOWN_JOBS_SECONDS", "30")) * 1000
 end
 
 if config_env() == :dev do

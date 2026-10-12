@@ -258,6 +258,7 @@ defmodule AkvyWeb.AdminComponents do
     doc: "maps with `:bucket` (DateTime), `:succeeded` and `:failed` counts"
 
   attr :id, :string, required: true
+  attr :class, :any, default: nil, doc: "extra classes; the bars fill the available height"
 
   @spec throughput_chart(map()) :: Phoenix.LiveView.Rendered.t()
   def throughput_chart(assigns) do
@@ -265,8 +266,8 @@ defmodule AkvyWeb.AdminComponents do
     assigns = assign(assigns, max: max(max, 1))
 
     ~H"""
-    <div id={@id}>
-      <div class="flex h-40 items-end gap-[2px]">
+    <div id={@id} class={["flex flex-col", @class]}>
+      <div class="flex min-h-40 flex-1 items-end gap-[2px]">
         <div
           :for={row <- @rows}
           class="group relative flex h-full flex-1 flex-col justify-end"

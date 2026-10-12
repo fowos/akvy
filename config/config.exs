@@ -37,6 +37,8 @@ config :akvy, Oban,
   engine: Oban.Engines.Basic,
   notifier: Oban.Notifiers.Postgres,
   repo: Akvy.Repo,
+  # Akvy.Shutdown.JobDrain already waited for running jobs; Oban only kills the rest.
+  shutdown_grace_period: 2_000,
   queues: [convert: 2, maintenance: 1],
   plugins: [
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
@@ -54,6 +56,8 @@ config :akvy, Akvy.Storage, adapter: Akvy.Storage.S3, bucket: "akvy"
 config :akvy, Akvy.FFmpeg, path: "ffmpeg"
 
 config :akvy, Akvy.Heartbeat, enabled: true
+
+config :akvy, Akvy.Shutdown, enabled: true, drain_ms: 5_000, jobs_ms: 30_000
 
 config :akvy, :work_dir, Path.join(System.tmp_dir!(), "akvy")
 

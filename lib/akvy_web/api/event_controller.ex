@@ -46,6 +46,7 @@ defmodule AkvyWeb.Api.EventController do
     with %Task{} = task <- Tasks.get_task_for_api_key(conn.assigns.api_key, id) do
       # Subscribe before reading the snapshot so no event can be missed.
       Tasks.subscribe_task(task.id)
+      Akvy.Shutdown.subscribe()
       task = Tasks.get_task!(task.id)
       conn = start_stream(conn)
 
@@ -76,6 +77,7 @@ defmodule AkvyWeb.Api.EventController do
   @spec index(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def index(conn, params) do
     Tasks.subscribe_api_key(conn.assigns.api_key.id)
+    Akvy.Shutdown.subscribe()
     queue_id = params["queue_id"]
 
     conn
@@ -120,6 +122,10 @@ defmodule AkvyWeb.Api.EventController do
                 conn
             end
         end
+
+      # The instance is stopping: end the stream, EventSource reconnects to another one.
+      :akvy_shutdown ->
+        conn
     after
       @heartbeat_ms ->
         case chunk(conn, ": ping\n\n") do

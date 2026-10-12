@@ -4,10 +4,13 @@ defmodule AkvyWeb.HealthController do
   """
   use AkvyWeb, :controller
 
-  @doc "Responds 200 with the instance id, or 503 if the database is unreachable."
+  @doc "Responds 200 with the instance id, or 503 while shutting down or without a database."
   @spec show(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def show(conn, _params) do
-    case Ecto.Adapters.SQL.query(Akvy.Repo, "SELECT 1", []) do
+    case Akvy.Shutdown.draining?() || Ecto.Adapters.SQL.query(Akvy.Repo, "SELECT 1", []) do
+      true ->
+        conn |> put_status(:service_unavailable) |> json(%{status: "draining"})
+
       {:ok, _} ->
         json(conn, %{status: "ok", instance: Akvy.Instance.id()})
 

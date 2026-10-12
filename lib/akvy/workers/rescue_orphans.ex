@@ -12,9 +12,8 @@ defmodule Akvy.Workers.RescueOrphans do
   use Oban.Worker, queue: :maintenance, max_attempts: 1
 
   import Ecto.Query
-  require Logger
 
-  alias Akvy.{Heartbeat, Repo, Tasks}
+  alias Akvy.{Heartbeat, Recovery, Repo}
   alias Akvy.Tasks.{Task, TaskEvent}
 
   @batch 100
@@ -61,76 +60,8 @@ defmodule Akvy.Workers.RescueOrphans do
 
   @spec rescue_job(Oban.Job.t()) :: :ok
   defp rescue_job(%Oban.Job{} = job) do
-    retry? = job.attempt < job.max_attempts
     instance = List.first(job.attempted_by || []) || "unknown"
-    reason = "instance #{instance} stopped responding"
-    error = %{attempt: job.attempt, at: DateTime.utc_now(), error: reason}
-
-    now = DateTime.utc_now()
-    state = if retry?, do: "available", else: "discarded"
-    discarded_at = if retry?, do: nil, else: now
-
-    # Matching attempted_at makes this a no-op if the job was acked meanwhile.
-    query =
-      from j in Oban.Job,
-        where: j.id == ^job.id and j.state == "executing" and j.attempted_at == ^job.attempted_at,
-        update: [
-          set: [
-            state: ^state,
-            scheduled_at: ^now,
-            discarded_at: ^discarded_at,
-            errors: fragment("? || ?", j.errors, ^[error])
-          ]
-        ]
-
-    case Repo.update_all(query, []) do
-      {1, _} ->
-        Logger.warning("rescued job #{job.id}: #{reason}")
-        fail_attempt(job.args["task_id"], reason, retry?)
-
-      _ ->
-        :ok
-    end
-  end
-
-  # Mirrors Akvy.Workers.Convert failure handling for an attempt that died with its instance.
-  @spec fail_attempt(UUIDv7.t() | nil, String.t(), boolean()) :: :ok
-  defp fail_attempt(task_id, reason, retry?) do
-    data = %{"error" => reason, "stage" => "instance_lost"}
-
-    result =
-      case task_id && Tasks.get_task(task_id) do
-        %Task{status: :processing} = task ->
-          with {:ok, task, _} <- Tasks.record_fresh(task, :attempt_failed, data: data) do
-            finish_attempt(task, reason, retry?)
-          end
-
-        %Task{status: status} = task when status in [:uploaded, :retrying] and not retry? ->
-          finish_attempt(task, reason, false)
-
-        _ ->
-          :ok
-      end
-
-    with {:error, error} <- result do
-      Logger.warning("rescue of task #{task_id} failed: #{inspect(error)}")
-    end
-
-    :ok
-  end
-
-  @spec finish_attempt(Task.t(), String.t(), boolean()) :: :ok | {:error, term()}
-  defp finish_attempt(task, _reason, true) do
-    data = %{"next_attempt" => task.attempt + 1}
-
-    with {:ok, _task, _} <- Tasks.record_fresh(task, :retry_scheduled, data: data), do: :ok
-  end
-
-  defp finish_attempt(task, reason, false) do
-    with {:ok, task, _} <- Tasks.record_fresh(task, :failed, data: %{"error" => reason}),
-         {:ok, _task} <- Tasks.delete_input(task) do
-      :ok
-    end
+    Recovery.release_job(job, "instance #{instance} stopped responding")
   end
 
   # The last event of a downloading task is `download_started`; it names the instance
@@ -155,10 +86,7 @@ defmodule Akvy.Workers.RescueOrphans do
       limit: @batch
     )
     |> Repo.all()
-    |> Enum.each(fn task ->
-      Logger.warning("released download of #{task.id}: serving instance stopped responding")
-      Tasks.abort_download(task)
-    end)
+    |> Enum.each(&Recovery.release_download(&1, "serving instance stopped responding"))
   end
 
   @spec prune_heartbeats() :: :ok

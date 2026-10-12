@@ -47,6 +47,8 @@ services:
       FFMPEG_CONCURRENCY: "2"
       INSTANCE_NAME: akvy-1
     ports: ["4000:4000"]
+    # Graceful shutdown budget, see SHUTDOWN_* variables.
+    stop_grace_period: 60s
     depends_on: &akvy-deps
       postgres: { condition: service_healthy }
       rustfs: { condition: service_started }
@@ -59,6 +61,7 @@ services:
       <<: *akvy-env
       INSTANCE_NAME: akvy-2
     ports: ["4001:4000"]
+    stop_grace_period: 60s
     depends_on: *akvy-deps
 
 volumes:

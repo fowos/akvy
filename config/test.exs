@@ -28,6 +28,8 @@ config :akvy, Oban, testing: :manual
 
 config :akvy, Akvy.Heartbeat, enabled: false
 
+config :akvy, Akvy.Shutdown, enabled: false
+
 config :akvy, Akvy.Storage,
   adapter: Akvy.Storage.Local,
   root: Path.join(System.tmp_dir!(), "akvy_test_storage")

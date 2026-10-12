@@ -27,10 +27,14 @@ defmodule Akvy.Application do
       {Oban, Keyword.put(Application.fetch_env!(:akvy, Oban), :node, instance_id)},
       # Liveness marker used to rescue this instance's work if it dies; reads the Oban producer.
       heartbeat_enabled?() && Akvy.Heartbeat,
+      # Stops after the endpoint and before Oban: finishes or hands over conversions.
+      Akvy.Shutdown.enabled?() && Akvy.Shutdown.JobDrain,
       Akvy.Cluster.Sampler,
       {Task, &ensure_bucket/0},
       # Start to serve requests, typically the last entry
-      AkvyWeb.Endpoint
+      AkvyWeb.Endpoint,
+      # Stops first: takes the instance out of the load balancer (see Akvy.Shutdown).
+      Akvy.Shutdown.enabled?() && Akvy.Shutdown.HttpDrain
     ]
 
     # See https://elixir.hexdocs.pm/Supervisor.html
