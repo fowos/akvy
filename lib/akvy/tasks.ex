@@ -364,6 +364,17 @@ defmodule Akvy.Tasks do
 
   ## Download lifecycle
 
+  @doc """
+  True while the converted file is still in storage (completed or being downloaded by
+  the client). The admin panel may read it then without affecting the lifecycle.
+  """
+  @spec result_available?(Task.t()) :: boolean()
+  def result_available?(%Task{status: status, output_key: key, output_deleted_at: nil})
+      when status in [:completed, :downloading] and is_binary(key),
+      do: true
+
+  def result_available?(%Task{}), do: false
+
   @doc "Locks a completed task for download (completed -> downloading)."
   @spec start_download(Task.t()) :: record_result()
   def start_download(%Task{} = task), do: record(task, :download_started)

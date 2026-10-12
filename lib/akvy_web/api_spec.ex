@@ -9,7 +9,9 @@ defmodule AkvyWeb.ApiSpec do
   @impl OpenApi
   def spec do
     %OpenApi{
-      servers: [Server.from_endpoint(AkvyWeb.Endpoint)],
+      # Relative URL: Swagger UI calls the API on the origin it was opened from, so it
+      # works behind proxies and when the endpoint url (scheme/port) differs from reality.
+      servers: [%Server{url: "/"}],
       info: %Info{
         title: "Akvy",
         version: "1.0",
@@ -28,7 +30,19 @@ defmodule AkvyWeb.ApiSpec do
       },
       paths: Paths.from_router(AkvyWeb.Router),
       components: %Components{
-        securitySchemes: %{"bearer" => %SecurityScheme{type: "http", scheme: "bearer"}}
+        securitySchemes: %{
+          "bearer" => %SecurityScheme{
+            type: "http",
+            scheme: "bearer",
+            description: "API key created in the admin panel (Admin → API keys)."
+          },
+          "api_key" => %SecurityScheme{
+            type: "apiKey",
+            in: "query",
+            name: "api_key",
+            description: "Same API key as a query parameter. Accepted only by SSE endpoints."
+          }
+        }
       },
       security: [%{"bearer" => []}]
     }

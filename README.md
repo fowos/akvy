@@ -15,7 +15,10 @@ for every task.
   Kubernetes API or Redis is required.
 - **Work distribution** uses [Oban](https://hexdocs.pm/oban) (Postgres). Each instance runs
   up to `FFMPEG_CONCURRENCY` ffmpeg processes.
-  - If an instance dies, `Lifeline` rescues its jobs.
+  - Every instance writes a heartbeat to `instance_heartbeats` every 10 s. Within about
+    a minute and a half after an instance dies, `RescueOrphans` retries its conversions
+    (or fails them on the last attempt) and releases its in-flight downloads. Live long
+    jobs are never restarted.
   - Cron jobs (file expiry, log pruning) run only on the leader instance.
 - **SSE across instances.** Task events are broadcast with the cluster-wide
   `Phoenix.PubSub`, so a client can follow a task from any instance.

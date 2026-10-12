@@ -11,7 +11,7 @@ defmodule AkvyWeb.Admin.TaskLive.Index do
   @page_size 50
 
   @typep filters :: %{
-           String.t() => Task.status() | Ecto.UUID.t() | nil
+           String.t() => Task.status() | UUIDv7.t() | nil
          }
 
   @impl true
@@ -88,7 +88,7 @@ defmodule AkvyWeb.Admin.TaskLive.Index do
   end
 
   # The notification may outrun visibility of the row or refer to a removed task.
-  @spec load_task(Ecto.UUID.t()) :: Task.t() | nil
+  @spec load_task(UUIDv7.t()) :: Task.t() | nil
   defp load_task(id) do
     case Tasks.get_task(id) do
       nil -> nil
@@ -96,7 +96,7 @@ defmodule AkvyWeb.Admin.TaskLive.Index do
     end
   end
 
-  @spec fetch(filters(), Ecto.UUID.t() | nil) :: [Task.t()]
+  @spec fetch(filters(), UUIDv7.t() | nil) :: [Task.t()]
   defp fetch(filters, cursor) do
     Tasks.list_tasks(%{
       status: filters["status"],
@@ -107,7 +107,7 @@ defmodule AkvyWeb.Admin.TaskLive.Index do
     })
   end
 
-  @spec cursor([Task.t()]) :: Ecto.UUID.t() | nil
+  @spec cursor([Task.t()]) :: UUIDv7.t() | nil
   defp cursor(tasks) when length(tasks) == @page_size, do: List.last(tasks).id
   defp cursor(_tasks), do: nil
 
@@ -121,7 +121,7 @@ defmodule AkvyWeb.Admin.TaskLive.Index do
   @spec valid_status(String.t() | nil) :: Task.status() | nil
   defp valid_status(value), do: Enum.find(Task.statuses(), &(to_string(&1) == value))
 
-  @spec valid_uuid(String.t() | nil) :: Ecto.UUID.t() | nil
+  @spec valid_uuid(String.t() | nil) :: UUIDv7.t() | nil
   defp valid_uuid(nil), do: nil
 
   defp valid_uuid(value) do

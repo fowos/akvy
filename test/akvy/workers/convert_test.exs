@@ -37,8 +37,8 @@ defmodule Akvy.Workers.ConvertTest do
              :ffmpeg_finished,
              :s3_upload_started,
              :s3_upload_finished,
-             :input_deleted,
-             :completed
+             :completed,
+             :input_deleted
            ]
 
     messages = task.id |> Tasks.list_logs() |> Enum.map(& &1.message)

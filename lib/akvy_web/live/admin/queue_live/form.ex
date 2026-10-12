@@ -13,7 +13,8 @@ defmodule AkvyWeb.Admin.QueueLive.Form do
     {:ok, apply_action(socket, socket.assigns.live_action, params)}
   end
 
-  @spec apply_action(Phoenix.LiveView.Socket.t(), :new | :edit, map()) :: Phoenix.LiveView.Socket.t()
+  @spec apply_action(Phoenix.LiveView.Socket.t(), :new | :edit, map()) ::
+          Phoenix.LiveView.Socket.t()
   defp apply_action(socket, :new, _params) do
     queue = %Queue{}
 
@@ -91,7 +92,8 @@ defmodule AkvyWeb.Admin.QueueLive.Form do
     end
   end
 
-  @spec assign_form(Phoenix.LiveView.Socket.t(), Ecto.Changeset.t()) :: Phoenix.LiveView.Socket.t()
+  @spec assign_form(Phoenix.LiveView.Socket.t(), Ecto.Changeset.t()) ::
+          Phoenix.LiveView.Socket.t()
   defp assign_form(socket, changeset) do
     queue = Ecto.Changeset.apply_changes(changeset)
 

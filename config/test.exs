@@ -26,6 +26,8 @@ config :akvy, AkvyWeb.Endpoint,
 # Print only warnings and errors during test
 config :akvy, Oban, testing: :manual
 
+config :akvy, Akvy.Heartbeat, enabled: false
+
 config :akvy, Akvy.Storage,
   adapter: Akvy.Storage.Local,
   root: Path.join(System.tmp_dir!(), "akvy_test_storage")

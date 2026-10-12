@@ -21,7 +21,7 @@ defmodule Akvy.Stats do
           | :processing_ms
           | :total_ms
 
-  @type queue_id :: Ecto.UUID.t() | nil
+  @type queue_id :: UUIDv7.t() | nil
 
   @type option :: {:since, DateTime.t()} | {:queue_id, queue_id()}
 

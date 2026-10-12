@@ -14,6 +14,10 @@ defmodule AkvyWeb.Api.EventController do
 
   tags ["Events"]
 
+  # EventSource cannot send headers, so SSE also accepts `?api_key=`.
+  @security [%{"bearer" => []}, %{"api_key" => []}]
+  @unauthorized {"Missing or invalid API key", "application/json", Schemas.Error}
+
   @heartbeat_ms 15_000
   @closing_statuses ~w(completed failed cancelled expired downloaded)
 
@@ -28,10 +32,11 @@ defmodule AkvyWeb.Api.EventController do
         "sent every 15s. The stream closes once the task is completed, failed, cancelled, " <>
         "expired or downloaded.",
     parameters: [
-      id: [in: :path, type: :string, description: "Task id", required: true],
-      api_key: [in: :query, type: :string, description: "API key (alternative to the header)"]
+      id: [in: :path, type: :string, description: "Task id", required: true]
     ],
+    security: @security,
     responses: [
+      unauthorized: @unauthorized,
       ok: {"Event stream", "text/event-stream", Schemas.TaskEvent},
       not_found: {"Not found", "application/json", Schemas.Error}
     ]
@@ -60,10 +65,13 @@ defmodule AkvyWeb.Api.EventController do
     summary: "Stream events of all tasks of the API key (SSE)",
     description: "Never closes on its own. Optionally filtered by queue.",
     parameters: [
-      queue_id: [in: :query, type: :string, description: "Only events of this queue"],
-      api_key: [in: :query, type: :string, description: "API key (alternative to the header)"]
+      queue_id: [in: :query, type: :string, description: "Only events of this queue"]
     ],
-    responses: [ok: {"Event stream", "text/event-stream", Schemas.TaskEvent}]
+    security: @security,
+    responses: [
+      unauthorized: @unauthorized,
+      ok: {"Event stream", "text/event-stream", Schemas.TaskEvent}
+    ]
 
   @spec index(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def index(conn, params) do

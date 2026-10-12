@@ -25,6 +25,8 @@ defmodule Akvy.Application do
        [Application.get_env(:libcluster, :topologies, []), [name: Akvy.ClusterSupervisor]]},
       {Phoenix.PubSub, name: Akvy.PubSub},
       {Oban, Keyword.put(Application.fetch_env!(:akvy, Oban), :node, instance_id)},
+      # Liveness marker used to rescue this instance's work if it dies; reads the Oban producer.
+      heartbeat_enabled?() && Akvy.Heartbeat,
       Akvy.Cluster.Sampler,
       {Task, &ensure_bucket/0},
       # Start to serve requests, typically the last entry
@@ -34,7 +36,7 @@ defmodule Akvy.Application do
     # See https://elixir.hexdocs.pm/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: Akvy.Supervisor]
-    Supervisor.start_link(children, opts)
+    Supervisor.start_link(Enum.filter(children, & &1), opts)
   end
 
   # Migrations run automatically in releases unless AUTO_MIGRATE=false.
@@ -42,6 +44,8 @@ defmodule Akvy.Application do
   defp auto_migrate? do
     System.get_env("RELEASE_NAME") != nil and System.get_env("AUTO_MIGRATE") != "false"
   end
+
+  defp heartbeat_enabled?, do: Application.get_env(:akvy, Akvy.Heartbeat)[:enabled] == true
 
   defp ensure_bucket do
     case Akvy.Storage.ensure_bucket() do

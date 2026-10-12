@@ -25,7 +25,7 @@ defmodule Akvy.Workers.PruneLogs do
   end
 
   @doc "Deletes logs of the queue's tasks older than `threshold`. Returns the count."
-  @spec prune(Ecto.UUID.t(), DateTime.t(), non_neg_integer()) :: non_neg_integer()
+  @spec prune(UUIDv7.t(), DateTime.t(), non_neg_integer()) :: non_neg_integer()
   def prune(queue_id, threshold, total \\ 0) do
     ids =
       from l in TaskLog,

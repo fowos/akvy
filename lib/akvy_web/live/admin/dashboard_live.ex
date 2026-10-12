@@ -69,7 +69,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
           <.period_tabs current={@period} path={&~p"/admin?period=#{&1}"} />
         </:actions>
       </.page_header>
-      
+
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-5">
         <.stat
           id="stat-processing"
@@ -112,7 +112,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
           hint="needed more than one attempt"
         />
       </div>
-      
+
       <div class="mt-6 grid gap-6 lg:grid-cols-5">
         <.card title="Throughput" class="lg:col-span-3">
           <:actions>
@@ -120,17 +120,17 @@ defmodule AkvyWeb.Admin.DashboardLive do
               <span class="flex items-center gap-1">
                 <span class="size-2 rounded-sm bg-primary/70" /> succeeded
               </span>
-              
+
               <span class="flex items-center gap-1"><span class="size-2 rounded-sm bg-error/70" />
               failed</span>
             </span>
           </:actions>
-          
+
           <div class="p-5">
             <.throughput_chart id="throughput-chart" rows={@overview.throughput} />
           </div>
         </.card>
-        
+
         <.card title="Where time goes (average)" class="lg:col-span-2">
           <div class="p-5 space-y-5">
             <.stage_bar id="avg-stage-bar" timings={@averages} />
@@ -138,15 +138,15 @@ defmodule AkvyWeb.Admin.DashboardLive do
               <thead class="text-xs text-base-content/50">
                 <tr>
                   <th class="text-left font-normal pb-2">Stage</th>
-                  
+
                   <th class="text-right font-normal pb-2">avg</th>
-                  
+
                   <th class="text-right font-normal pb-2">p50</th>
-                  
+
                   <th class="text-right font-normal pb-2">p95</th>
                 </tr>
               </thead>
-              
+
               <tbody class="tabular-nums">
                 <tr
                   :for={
@@ -156,11 +156,11 @@ defmodule AkvyWeb.Admin.DashboardLive do
                   class="border-t border-base-200"
                 >
                   <td class="py-1.5 text-base-content/70">{stage_name(stage)}</td>
-                  
+
                   <td class="py-1.5 text-right">{format_ms(@overview.stages[stage].avg)}</td>
-                  
+
                   <td class="py-1.5 text-right">{format_ms(@overview.stages[stage].p50)}</td>
-                  
+
                   <td class="py-1.5 text-right">{format_ms(@overview.stages[stage].p95)}</td>
                 </tr>
               </tbody>
@@ -168,7 +168,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
           </div>
         </.card>
       </div>
-      
+
       <div class="mt-6 grid gap-6 lg:grid-cols-5">
         <.card title="Queues" class="lg:col-span-3 overflow-hidden">
           <:actions>
@@ -176,7 +176,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
               Manage
             </.link>
           </:actions>
-          
+
           <%= if @queues == [] do %>
             <.empty_state id="queues-empty" icon="hero-queue-list" title="No queues yet">
               <.link navigate={~p"/admin/queues/new"} class="text-primary hover:underline">
@@ -189,19 +189,19 @@ defmodule AkvyWeb.Admin.DashboardLive do
                 <thead class="bg-base-200/50 text-xs text-base-content/50">
                   <tr>
                     <th class="px-5 py-2 text-left font-medium">Queue</th>
-                    
+
                     <th class="px-3 py-2 text-right font-medium">Active</th>
-                    
+
                     <th class="px-3 py-2 text-right font-medium">Done</th>
-                    
+
                     <th class="px-3 py-2 text-right font-medium">Failed</th>
-                    
+
                     <th class="px-3 py-2 text-right font-medium">avg ffmpeg</th>
-                    
+
                     <th class="px-5 py-2 text-right font-medium">p95 total</th>
                   </tr>
                 </thead>
-                
+
                 <tbody class="tabular-nums">
                   <tr
                     :for={row <- @queues}
@@ -214,20 +214,20 @@ defmodule AkvyWeb.Admin.DashboardLive do
                       >
                         {row.queue.name}
                       </.link>
-                      
+
                       <span :if={!row.queue.enabled} class="ml-1 text-xs text-base-content/40">
                         disabled
                       </span>
                     </td>
-                    
+
                     <td class="px-3 py-2.5 text-right">{row.active}</td>
-                    
+
                     <td class="px-3 py-2.5 text-right text-success">{row.succeeded}</td>
-                    
+
                     <td class="px-3 py-2.5 text-right text-error">{row.failed}</td>
-                    
+
                     <td class="px-3 py-2.5 text-right">{format_ms(row.avg_ffmpeg_ms)}</td>
-                    
+
                     <td class="px-5 py-2.5 text-right">{format_ms(row.p95_total_ms)}</td>
                   </tr>
                 </tbody>
@@ -235,40 +235,40 @@ defmodule AkvyWeb.Admin.DashboardLive do
             </div>
           <% end %>
         </.card>
-        
+
         <.card title="Cluster" class="lg:col-span-2 overflow-hidden">
           <:actions>
             <.link navigate={~p"/admin/cluster"} class="text-xs text-primary hover:underline">
               Details
             </.link>
           </:actions>
-          
+
           <div class="grid grid-cols-3 divide-x divide-base-200 border-b border-base-200 text-center">
             <div class="px-3 py-3">
               <p id="dashboard-cluster-nodes" class="text-xl font-semibold tabular-nums">
                 {@cluster.summary.reachable}
               </p>
-              
+
               <p class="text-xs text-base-content/50">nodes online</p>
             </div>
-            
+
             <div class="px-3 py-3">
               <p class="text-xl font-semibold tabular-nums">
                 {@cluster.summary.ffmpeg_running}<span class="text-base-content/40">/{@cluster.summary.ffmpeg_limit}</span>
               </p>
-              
+
               <p class="text-xs text-base-content/50">ffmpeg slots</p>
             </div>
-            
+
             <div class="px-3 py-3">
               <p class="text-xl font-semibold tabular-nums">
                 {format_cpu(@cluster.summary.cpu_percent)}
               </p>
-              
+
               <p class="text-xs text-base-content/50">avg CPU</p>
             </div>
           </div>
-          
+
           <ul id="dashboard-nodes" class="divide-y divide-base-200">
             <li :for={n <- @cluster.nodes} class="flex items-center gap-3 px-5 py-3">
               <span class={[
@@ -284,15 +284,15 @@ defmodule AkvyWeb.Admin.DashboardLive do
                   {n.instance}
                   <span :if={!n.online} class="text-xs font-normal text-base-content/40">offline</span>
                 </p>
-                
+
                 <p class="text-xs text-base-content/50">
                   {n.processed} processed in {@period} · avg ffmpeg {format_ms(n.avg_ffmpeg_ms)}
                 </p>
               </div>
-              
+
               <div :if={n.online} class="w-20 text-right">
                 <p class="text-xs tabular-nums">{n.running}/{n.limit}</p>
-                
+
                 <div class="mt-1 h-1 overflow-hidden rounded-full bg-base-200">
                   <div
                     class="h-full rounded-full bg-primary transition-all duration-700"
@@ -304,7 +304,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
           </ul>
         </.card>
       </div>
-      
+
       <.card :if={@recent_failures != []} title="Recent failures" class="mt-6 overflow-hidden">
         <:actions>
           <.link
@@ -314,7 +314,7 @@ defmodule AkvyWeb.Admin.DashboardLive do
             View all
           </.link>
         </:actions>
-        
+
         <ul id="recent-failures" class="divide-y divide-base-200">
           <li :for={task <- @recent_failures}>
             <.link
@@ -324,10 +324,10 @@ defmodule AkvyWeb.Admin.DashboardLive do
               <.icon name="hero-exclamation-triangle" class="size-5 text-error shrink-0" />
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-medium">{task.original_filename || task.id}</p>
-                
+
                 <p class="truncate text-xs text-base-content/60">{task.error}</p>
               </div>
-              
+
               <span class="text-xs text-base-content/50 whitespace-nowrap">
                 {task.queue.name} · {format_relative(task.finished_at)}
               </span>

@@ -37,7 +37,7 @@ defmodule Akvy.FFmpeg do
         {:error, "must not be empty"}
 
       not Enum.any?(argv, &String.contains?(&1, "{input}")) ->
-         {:error, "must contain {input}"}
+        {:error, "must contain {input}"}
 
       not Enum.any?(argv, &String.contains?(&1, "{output}")) ->
         {:error, "must contain {output}"}
@@ -45,7 +45,8 @@ defmodule Akvy.FFmpeg do
       List.first(argv) =~ ~r/^ffmpeg(\.exe)?$/i ->
         {:error, "must not include the ffmpeg binary"}
 
-      true -> {:ok, argv}
+      true ->
+        {:ok, argv}
     end
   end
 

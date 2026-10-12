@@ -76,12 +76,80 @@ defmodule AkvyWeb.Admin.AdminLiveTest do
       assert has_element?(view, "#queue-recent-tasks")
     end
 
+    test "uploads a file into the queue on behalf of an API key", %{conn: conn} do
+      queue = queue_fixture()
+      {api_key, _raw} = api_key_fixture()
+      {:ok, view, _html} = live(conn, ~p"/admin/queues/#{queue}")
+
+      file =
+        file_input(view, "#upload-form", :file, [
+          %{name: "movie.mov", content: "admin upload", type: "video/quicktime"}
+        ])
+
+      assert render_upload(file, "movie.mov") =~ "movie.mov"
+
+      {:ok, _view, _html} =
+        view
+        |> form("#upload-form", upload: %{api_key_id: api_key.id})
+        |> render_submit()
+        |> follow_redirect(conn)
+
+      assert [task] = Akvy.Tasks.list_tasks(%{queue_id: queue.id})
+      assert task.original_filename == "movie.mov"
+      assert task.api_key_id == api_key.id
+      assert task.status == :uploaded
+    end
+
+    test "rejects a file type the queue does not accept", %{conn: conn} do
+      queue = queue_fixture(%{allowed_content_types: ["video/*"]})
+      {:ok, view, _html} = live(conn, ~p"/admin/queues/#{queue}")
+
+      file =
+        file_input(view, "#upload-form", :file, [
+          %{name: "notes.txt", content: "text", type: "text/plain"}
+        ])
+
+      render_upload(file, "notes.txt")
+      html = view |> form("#upload-form") |> render_submit()
+
+      assert html =~ "not accepted"
+      assert Akvy.Tasks.list_tasks(%{queue_id: queue.id}) == []
+    end
+
+    test "task page offers the result download while the file exists", %{conn: conn} do
+      task = completed_task_fixture()
+      {:ok, view, _html} = live(conn, ~p"/admin/tasks/#{task.id}")
+      assert has_element?(view, ~s(#download-result[href="/admin/tasks/#{task.id}/result"]))
+
+      {:ok, _} = Akvy.Tasks.cancel_task(task)
+      {:ok, view, _html} = live(conn, ~p"/admin/tasks/#{task.id}")
+      refute has_element?(view, "#download-result")
+    end
+
     test "queues can be toggled from the list", %{conn: conn} do
       queue = queue_fixture()
       {:ok, view, _html} = live(conn, ~p"/admin/queues")
 
       view |> element("#toggle-#{queue.id}") |> render_click()
       refute Queues.get_queue!(queue.id).enabled
+    end
+
+    test "queues can be edited from the list", %{conn: conn} do
+      queue = queue_fixture()
+      {:ok, view, _html} = live(conn, ~p"/admin/queues")
+
+      {:ok, view, _html} =
+        view |> element("#edit-#{queue.id}") |> render_click() |> follow_redirect(conn)
+
+      {:ok, _view, _html} =
+        view
+        |> form("#queue-form", queue: %{name: "renamed", max_file_size_mb: "5"})
+        |> render_submit()
+        |> follow_redirect(conn, ~p"/admin/queues/#{queue}")
+
+      queue = Queues.get_queue!(queue.id)
+      assert queue.name == "renamed"
+      assert queue.max_file_size_bytes == 5 * 1024 * 1024
     end
 
     test "task list filters and updates live", %{conn: conn} do
@@ -108,7 +176,7 @@ defmodule AkvyWeb.Admin.AdminLiveTest do
 
       assert has_element?(view, "#task-stage-bar")
       assert has_element?(view, "#task-events")
-      assert has_element?(view, "#event-#{task.version}", "Completed")
+      assert has_element?(view, "#task-events", "Completed")
       assert has_element?(view, "#task-logs")
       assert has_element?(view, "#task-ffmpeg")
 

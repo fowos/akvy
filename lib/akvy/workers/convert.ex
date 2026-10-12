@@ -41,31 +41,45 @@ defmodule Akvy.Workers.Convert do
           :ok | {:error, String.t()} | {:cancel, term()}
   defp run(task, queue, job) do
     work_dir = Path.join(Application.fetch_env!(:akvy, :work_dir), "#{task.id}-#{job.attempt}")
-    File.mkdir_p!(work_dir)
 
     try do
       wait_ms = queue_wait_ms(job)
       task = record!(task, :attempt_started, attempt: job.attempt, duration_ms: wait_ms)
       logs = LogBuffer.new(task.id, job.attempt)
 
+      case File.mkdir_p(work_dir) do
+        :ok ->
+          :ok
+
+        {:error, reason} ->
+          fail!(task, logs, "cannot create #{work_dir}: #{:file.format_error(reason)}", %{
+            "stage" => "work_dir"
+          })
+      end
+
       {task, logs} = convert(task, queue, work_dir, logs)
 
+      expires_at = DateTime.add(DateTime.utc_now(), queue.result_ttl_seconds, :second)
+      task = record!(task, :completed, data: %{"expires_at" => DateTime.to_iso8601(expires_at)})
+
+      # Log flush and cleanup run after `completed` so the client is not kept waiting.
       # A failed cleanup is retried by Akvy.Workers.ExpireFiles; it must not fail the task.
-      {task, logs} =
+      logs =
         case Tasks.delete_input(task) do
-          {:ok, task} ->
-            {task, logs}
+          {:ok, _task} ->
+            logs
 
           {:error, reason} ->
-            {task,
-             LogBuffer.add(logs, :worker, :warning, "input cleanup failed: #{inspect(reason)}")}
+            LogBuffer.add(logs, :worker, :warning, "input cleanup failed: #{inspect(reason)}")
         end
 
       LogBuffer.flush(logs)
-
-      expires_at = DateTime.add(DateTime.utc_now(), queue.result_ttl_seconds, :second)
-      record!(task, :completed, data: %{"expires_at" => DateTime.to_iso8601(expires_at)})
       :ok
+    rescue
+      # Without this the job is discarded after the last attempt and the task hangs.
+      exception ->
+        Logger.error(Exception.format(:error, exception, __STACKTRACE__))
+        fail_unexpected(task.id, job, Exception.message(exception))
     catch
       {:stage_failed, task, logs, reason, data} ->
         LogBuffer.flush(logs)
@@ -185,6 +199,26 @@ defmodule Akvy.Workers.Convert do
 
       {:cancel, reason}
     end
+  end
+
+  # Records an unexpected crash against the freshly loaded task.
+  @spec fail_unexpected(UUIDv7.t(), Oban.Job.t(), String.t()) ::
+          :ok | {:error, String.t()} | {:cancel, term()}
+  defp fail_unexpected(task_id, job, reason) do
+    case Tasks.get_task(task_id) do
+      %Task{status: :processing} = task ->
+        handle_failure(task, job, reason, %{"stage" => "unexpected"})
+
+      %Task{status: status} = task
+      when status in [:uploaded, :retrying] and job.attempt >= job.max_attempts ->
+        record!(task, :failed, data: %{"error" => reason})
+        {:cancel, reason}
+
+      _ ->
+        {:error, reason}
+    end
+  catch
+    {:abort, abort_reason} -> {:cancel, abort_reason}
   end
 
   @spec fail!(Task.t(), LogBuffer.t(), String.t(), map()) :: no_return()

@@ -55,7 +55,7 @@ defmodule AkvyWeb.Router do
   scope "/api" do
     pipe_through [:browser]
 
-    get "/docs", OpenApiSpex.Plug.SwaggerUI, path: "/api/openapi"
+    get "/docs", OpenApiSpex.Plug.SwaggerUI, path: "/api/openapi", persist_authorization: true
   end
 
   scope "/api/v1", AkvyWeb.Api do
@@ -98,6 +98,9 @@ defmodule AkvyWeb.Router do
       live "/api-keys", ApiKeyLive.Index, :index
       live "/cluster", ClusterLive, :index
     end
+
+    # Read-only download: does not change the task or delete the file.
+    get "/tasks/:id/result", ResultController, :show
   end
 
   scope "/admin" do

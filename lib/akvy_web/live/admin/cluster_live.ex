@@ -49,7 +49,7 @@ defmodule AkvyWeb.Admin.ClusterLive do
           </span>
         </:actions>
       </.page_header>
-      
+
       <div
         :if={!@distributed?}
         id="cluster-not-distributed"
@@ -61,7 +61,7 @@ defmodule AkvyWeb.Admin.ClusterLive do
           Releases start distributed and discover each other automatically.
         </p>
       </div>
-      
+
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <.stat
           id="cluster-nodes"
@@ -96,7 +96,7 @@ defmodule AkvyWeb.Admin.ClusterLive do
           hint="sum over nodes"
         />
       </div>
-      
+
       <div id="cluster-node-list" class="mt-6 grid gap-6 xl:grid-cols-2">
         <.card :for={n <- @nodes} id={"node-#{dom_id(n.node)}"} class="overflow-hidden">
           <div class="flex items-start justify-between gap-4 border-b border-base-300 px-5 py-4">
@@ -107,7 +107,7 @@ defmodule AkvyWeb.Admin.ClusterLive do
                   if(n.reachable, do: "bg-success", else: "bg-error")
                 ]} />
                 <p class="truncate font-semibold">{n.instance}</p>
-                
+
                 <span
                   :if={n.current?}
                   class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
@@ -115,25 +115,25 @@ defmodule AkvyWeb.Admin.ClusterLive do
                   this node
                 </span>
               </div>
-              
+
               <p class="mt-1 truncate font-mono text-xs text-base-content/50">{n.node}</p>
             </div>
-            
+
             <p :if={n.reachable} class="text-right text-xs text-base-content/50 whitespace-nowrap">
               up {format_ms(n.uptime_ms)}<br /> v{n.version} · OTP {n.otp_release}
             </p>
           </div>
-          
+
           <%= if n.reachable do %>
             <div class="grid grid-cols-2 gap-px bg-base-300 sm:grid-cols-4">
               <.metric label="FFmpeg" value={"#{n.ffmpeg.running} / #{n.ffmpeg.limit}"}>
                 <.meter value={n.ffmpeg.running} max={n.ffmpeg.limit} />
               </.metric>
-              
+
               <.metric label="CPU" value={format_cpu(n.cpu_percent)}>
                 <.meter value={n.cpu_percent || 0} max={100} />
               </.metric>
-              
+
               <.metric
                 label="Memory"
                 value={
@@ -147,12 +147,12 @@ defmodule AkvyWeb.Admin.ClusterLive do
                   max={n.system_memory_total || 0}
                 />
               </.metric>
-              
+
               <.metric label="Load 1m" value={n.load1 || "—"}>
                 <p class="text-[11px] text-base-content/40">{n.schedulers} schedulers</p>
               </.metric>
             </div>
-            
+
             <div class="px-5 py-4">
               <div class="mb-2 flex items-center justify-between text-xs text-base-content/50">
                 <span>Last 5 minutes</span>
@@ -163,32 +163,32 @@ defmodule AkvyWeb.Admin.ClusterLive do
                   ffmpeg slots</span>
                 </span>
               </div>
-              
+
               <.sparkline id={"spark-#{dom_id(n.node)}"} history={n.history} limit={n.ffmpeg.limit} />
             </div>
-            
+
             <dl class="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-base-300 px-5 py-3 text-xs sm:grid-cols-4">
               <div>
                 <dt class="text-base-content/50">Processes</dt>
-                
+
                 <dd class="font-medium tabular-nums">{n.process_count}</dd>
               </div>
-              
+
               <div>
                 <dt class="text-base-content/50">Run queue</dt>
-                
+
                 <dd class="font-medium tabular-nums">{n.run_queue}</dd>
               </div>
-              
+
               <div>
                 <dt class="text-base-content/50">BEAM memory</dt>
-                
+
                 <dd class="font-medium tabular-nums">{format_bytes(n.beam_memory)}</dd>
               </div>
-              
+
               <div>
                 <dt class="text-base-content/50">Processed 24h</dt>
-                
+
                 <dd class="font-medium tabular-nums">
                   {(@processed[n.instance] && @processed[n.instance].processed) || 0}
                   <span
@@ -217,9 +217,9 @@ defmodule AkvyWeb.Admin.ClusterLive do
     ~H"""
     <div class="bg-base-100 px-5 py-3">
       <p class="text-xs text-base-content/50">{@label}</p>
-      
+
       <p class="mt-0.5 text-lg font-semibold tabular-nums">{@value}</p>
-      
+
       <div class="mt-1.5">{render_slot(@inner_block)}</div>
     </div>
     """
@@ -271,7 +271,7 @@ defmodule AkvyWeb.Admin.ClusterLive do
           style={"height: #{if @limit > 0, do: min(s.ffmpeg * 100 / @limit, 100), else: 0}%"}
         />
       </div>
-      
+
       <p :if={@history == []} class="text-xs text-base-content/40">Collecting samples…</p>
     </div>
     """

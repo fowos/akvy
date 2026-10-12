@@ -55,7 +55,8 @@ defmodule AkvyWeb.Admin.QueueLive.Index do
                 <th class="px-3 py-2.5 text-right font-medium">Max size</th>
                 <th class="px-3 py-2.5 text-right font-medium">TTL</th>
                 <th class="px-3 py-2.5 text-right font-medium">24h done / failed</th>
-                <th class="px-5 py-2.5 text-right font-medium">Enabled</th>
+                <th class="px-3 py-2.5 text-right font-medium">Enabled</th>
+                <th class="px-5 py-2.5"><span class="sr-only">Actions</span></th>
               </tr>
             </thead>
             <tbody id="queues" phx-update="stream">
@@ -89,7 +90,7 @@ defmodule AkvyWeb.Admin.QueueLive.Index do
                   <span class="text-base-content/30">/</span>
                   <span class="text-error">{row.failed}</span>
                 </td>
-                <td class="px-5 py-3 text-right">
+                <td class="px-3 py-3 text-right">
                   <input
                     id={"toggle-#{row.queue.id}"}
                     type="checkbox"
@@ -98,6 +99,16 @@ defmodule AkvyWeb.Admin.QueueLive.Index do
                     phx-click="toggle"
                     phx-value-id={row.queue.id}
                   />
+                </td>
+                <td class="px-5 py-3 text-right">
+                  <.link
+                    id={"edit-#{row.queue.id}"}
+                    navigate={~p"/admin/queues/#{row.queue}/edit"}
+                    title="Edit queue"
+                    class="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-base-content/60 transition hover:bg-base-200 hover:text-primary"
+                  >
+                    <.icon name="hero-pencil-square" class="size-4" /> Edit
+                  </.link>
                 </td>
               </tr>
             </tbody>

@@ -9,11 +9,15 @@ defmodule AkvyWeb.Api.TaskController do
   alias Akvy.Queues.Queue
   alias Akvy.Tasks.Task
   alias AkvyWeb.Api.Schemas
+  alias AkvyWeb.ResultFile
   alias OpenApiSpex.Schema
 
   action_fallback AkvyWeb.Api.FallbackController
 
   tags ["Tasks"]
+
+  @security [%{"bearer" => []}]
+  @unauthorized {"Missing or invalid API key", "application/json", Schemas.Error}
 
   @type action_result :: Plug.Conn.t() | AkvyWeb.Api.FallbackController.error()
 
@@ -34,7 +38,9 @@ defmodule AkvyWeb.Api.TaskController do
          properties: %{file: %Schema{type: :string, format: :binary}},
          required: [:file]
        }, required: true},
+    security: @security,
     responses: [
+      unauthorized: @unauthorized,
       accepted: {"Task created", "application/json", Schemas.TaskResponse},
       not_found: {"Queue not found or disabled", "application/json", Schemas.Error},
       request_entity_too_large:
@@ -77,7 +83,11 @@ defmodule AkvyWeb.Api.TaskController do
       cursor: [in: :query, type: :string, description: "`next_cursor` from the previous page"],
       limit: [in: :query, type: :integer, description: "Page size (1-200, default 50)"]
     ],
-    responses: [ok: {"Tasks", "application/json", Schemas.TaskList}]
+    security: @security,
+    responses: [
+      unauthorized: @unauthorized,
+      ok: {"Tasks", "application/json", Schemas.TaskList}
+    ]
 
   @spec index(Plug.Conn.t(), map()) :: Plug.Conn.t()
   def index(conn, params) do
@@ -100,7 +110,9 @@ defmodule AkvyWeb.Api.TaskController do
   operation :show,
     summary: "Get a task",
     parameters: @task_id,
+    security: @security,
     responses: [
+      unauthorized: @unauthorized,
       ok: {"Task", "application/json", Schemas.TaskResponse},
       not_found: {"Not found", "application/json", Schemas.Error}
     ]
@@ -118,7 +130,9 @@ defmodule AkvyWeb.Api.TaskController do
       "Streams the converted file. After a complete download the file is deleted from storage " <>
         "and the task becomes `downloaded`; an interrupted download can be retried.",
     parameters: @task_id,
+    security: @security,
     responses: [
+      unauthorized: @unauthorized,
       ok: {"Converted file", "application/octet-stream", %Schema{type: :string, format: :binary}},
       conflict: {"Not completed yet or being downloaded", "application/json", Schemas.Error},
       gone: {"Already downloaded or expired", "application/json", Schemas.Error},
@@ -148,7 +162,9 @@ defmodule AkvyWeb.Api.TaskController do
       "Stops the conversion (if running) and deletes the source and result files. " <>
         "Allowed for queued, processing and completed tasks.",
     parameters: @task_id,
+    security: @security,
     responses: [
+      unauthorized: @unauthorized,
       ok: {"Cancelled task", "application/json", Schemas.TaskResponse},
       conflict: {"Task cannot be cancelled", "application/json", Schemas.Error},
       not_found: {"Not found", "application/json", Schemas.Error}
@@ -166,26 +182,7 @@ defmodule AkvyWeb.Api.TaskController do
   defp send_result(conn, task, stream, size) do
     queue = Queues.get_queue!(task.queue_id)
 
-    conn =
-      conn
-      |> put_resp_content_type(queue.output_content_type, nil)
-      |> put_resp_header("content-disposition", content_disposition(task, queue))
-      |> put_resp_header("x-file-size", to_string(size))
-      |> send_chunked(200)
-
-    result =
-      try do
-        Enum.reduce_while(stream, {:ok, conn}, fn chunk, {:ok, conn} ->
-          case chunk(conn, chunk) do
-            {:ok, conn} -> {:cont, {:ok, conn}}
-            {:error, reason} -> {:halt, {:error, conn, reason}}
-          end
-        end)
-      rescue
-        error -> {:error, conn, Exception.message(error)}
-      end
-
-    case result do
+    case ResultFile.send(conn, task, queue, stream, size) do
       {:ok, conn} ->
         Tasks.finish_download(task)
         conn
@@ -226,19 +223,6 @@ defmodule AkvyWeb.Api.TaskController do
       {:error, :unsupported_media_type,
        "Content type #{upload.content_type} is not accepted by this queue"}
     end
-  end
-
-  @spec content_disposition(Task.t(), Queue.t()) :: String.t()
-  defp content_disposition(task, queue) do
-    base =
-      (task.original_filename || task.id)
-      |> Path.rootname()
-      |> String.replace(~r/[\x00-\x1f"\\\/]/u, "_")
-
-    filename = "#{base}.#{queue.output_extension}"
-    ascii = String.replace(filename, ~r/[^\x20-\x7e]/u, "_")
-
-    ~s(attachment; filename="#{ascii}"; filename*=UTF-8''#{URI.encode(filename, &URI.char_unreserved?/1)})
   end
 
   @spec parse_int(String.Chars.t(), integer()) :: integer()

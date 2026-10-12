@@ -8,12 +8,16 @@ defmodule AkvyWeb.Api.QueueController do
 
   tags ["Queues"]
 
+  @security [%{"bearer" => []}]
+  @unauthorized {"Missing or invalid API key", "application/json", Schemas.Error}
+
   operation :index,
     summary: "List queues",
     description: "Enabled conversion queues available to the client.",
+    security: @security,
     responses: [
-      ok: {"Queues", "application/json", Schemas.QueueList},
-      unauthorized: {"Missing or invalid API key", "application/json", Schemas.Error}
+      unauthorized: @unauthorized,
+      ok: {"Queues", "application/json", Schemas.QueueList}
     ]
 
   @spec index(Plug.Conn.t(), map()) :: Plug.Conn.t()

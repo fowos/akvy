@@ -76,7 +76,7 @@ defmodule AkvyWeb.Admin.TaskLive.Show do
     {:noreply, socket |> assign(log_attempt: attempt) |> load_logs()}
   end
 
-  @spec load(Phoenix.LiveView.Socket.t(), Ecto.UUID.t()) :: Phoenix.LiveView.Socket.t()
+  @spec load(Phoenix.LiveView.Socket.t(), UUIDv7.t()) :: Phoenix.LiveView.Socket.t()
   defp load(socket, id) do
     task = id |> Tasks.get_task!() |> Repo.preload([:queue, :api_key])
     events = Tasks.list_events(id)
@@ -162,6 +162,16 @@ defmodule AkvyWeb.Admin.TaskLive.Show do
           <p class="mt-1 font-mono text-xs text-base-content/50">{@task.id}</p>
         </div>
         <div class="flex items-center gap-2">
+          <.link
+            :if={Tasks.result_available?(@task)}
+            id="download-result"
+            href={~p"/admin/tasks/#{@task.id}/result"}
+            download
+            title="Download without marking the task as downloaded; the client can still fetch it"
+            class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-content shadow-sm transition hover:brightness-110 active:scale-[.98]"
+          >
+            <.icon name="hero-arrow-down-tray" class="size-4" /> Download result
+          </.link>
           <button
             :if={@task.status in [:uploaded, :retrying, :processing, :completed]}
             id="cancel-task"

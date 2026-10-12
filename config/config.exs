@@ -39,11 +39,12 @@ config :akvy, Oban,
   repo: Akvy.Repo,
   queues: [convert: 2, maintenance: 1],
   plugins: [
-    {Oban.Plugins.Lifeline, rescue_after: :timer.minutes(30)},
     {Oban.Plugins.Pruner, max_age: 60 * 60 * 24 * 7},
     {Oban.Plugins.Cron,
      crontab: [
        {"* * * * *", Akvy.Workers.ExpireFiles},
+       # Replaces Oban's time-based Lifeline: rescues only jobs of dead instances.
+       {"* * * * *", Akvy.Workers.RescueOrphans},
        {"17 * * * *", Akvy.Workers.PruneLogs}
      ]}
   ]
@@ -51,6 +52,8 @@ config :akvy, Oban,
 config :akvy, Akvy.Storage, adapter: Akvy.Storage.S3, bucket: "akvy"
 
 config :akvy, Akvy.FFmpeg, path: "ffmpeg"
+
+config :akvy, Akvy.Heartbeat, enabled: true
 
 config :akvy, :work_dir, Path.join(System.tmp_dir!(), "akvy")
 

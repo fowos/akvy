@@ -17,7 +17,7 @@ defmodule Akvy.Workers.ExpireFiles do
 
   @batch 200
   @stuck_download_after_seconds 6 * 60 * 60
-  @orphan_after_seconds 60 * 60
+  @orphan_after_seconds 10 * 60
 
   @impl Oban.Worker
   def perform(_job) do
@@ -72,8 +72,9 @@ defmodule Akvy.Workers.ExpireFiles do
     end)
   end
 
-  # A task can be left active without a job when its job was discarded by the
-  # Lifeline plugin after an instance crashed on its last attempt.
+  # Last-resort net: an active task always has a live job (both are written in one
+  # transaction, failures are recorded before the job ends), so a task without one
+  # means the job was lost some other way, e.g. deleted manually.
   @spec fail_orphans(DateTime.t()) :: :ok
   defp fail_orphans(now) do
     threshold = DateTime.add(now, -@orphan_after_seconds, :second)

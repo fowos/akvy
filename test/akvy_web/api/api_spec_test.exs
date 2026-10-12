@@ -17,6 +17,20 @@ defmodule AkvyWeb.ApiSpecTest do
     end
   end
 
+  test "documents authentication for every operation", %{conn: conn} do
+    spec = conn |> get(~p"/api/openapi") |> json_response(200)
+
+    assert spec["servers"] == [%{"url" => "/", "variables" => %{}}]
+
+    assert %{"bearer" => %{"type" => "http"}, "api_key" => %{"in" => "query"}} =
+             spec["components"]["securitySchemes"]
+
+    for {path, ops} <- spec["paths"], {method, op} <- ops do
+      assert [%{"bearer" => []} | _] = op["security"], "#{method} #{path} has no security"
+      assert Map.has_key?(op["responses"], "401"), "#{method} #{path} has no 401"
+    end
+  end
+
   test "serves Swagger UI", %{conn: conn} do
     assert conn |> get(~p"/api/docs") |> html_response(200) =~ "swagger"
   end
