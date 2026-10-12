@@ -1,0 +1,240 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active={:tasks}>
+  <.link
+    navigate={~p"/admin/tasks"}
+    class="mb-4 inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content transition"
+  >
+    <.icon name="hero-arrow-left" class="size-4" /> Tasks
+  </.link>
+
+  <div class="mb-8 flex flex-wrap items-start justify-between gap-4">
+    <div class="min-w-0">
+      <div class="flex items-center gap-3">
+        <h1 class="truncate text-2xl font-semibold tracking-tight">
+          {@task.original_filename || "Untitled"}
+        </h1>
+        <.status_badge status={@task.status} />
+      </div>
+      <p class="mt-1 font-mono text-xs text-base-content/50">{@task.id}</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <.link
+        :if={Tasks.result_available?(@task)}
+        id="download-result"
+        href={~p"/admin/tasks/#{@task.id}/result"}
+        download
+        title="Download without marking the task as downloaded; the client can still fetch it"
+        class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-content shadow-sm transition hover:brightness-110 active:scale-[.98]"
+      >
+        <.icon name="hero-arrow-down-tray" class="size-4" /> Download result
+      </.link>
+      <button
+        :if={@task.status in [:uploaded, :retrying, :processing, :completed]}
+        id="cancel-task"
+        phx-click="cancel"
+        data-confirm="Cancel this task and delete its files?"
+        class="rounded-lg border border-error/30 px-3 py-1.5 text-sm font-medium text-error transition hover:bg-error/10"
+      >
+        Cancel task
+      </button>
+      <button
+        id="rebuild-task"
+        phx-click="rebuild"
+        title="Recompute the snapshot from the event history"
+        class="rounded-lg border border-base-300 bg-base-100 px-3 py-1.5 text-sm font-medium transition hover:bg-base-200"
+      >
+        <.icon name="hero-arrow-path" class="size-4" />
+      </button>
+    </div>
+  </div>
+
+  <div
+    :if={@task.error}
+    id="task-error"
+    class="mb-6 flex gap-3 rounded-2xl border border-error/30 bg-error/5 p-4 text-sm"
+  >
+    <.icon name="hero-exclamation-triangle" class="size-5 shrink-0 text-error" />
+    <p class="break-all">{@task.error}</p>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <.stat
+      id="task-total"
+      label="Total"
+      value={format_ms(@task.total_ms)}
+      icon="hero-clock"
+      hint="upload → finished"
+    />
+    <.stat
+      id="task-ffmpeg"
+      label="FFmpeg"
+      value={format_ms(@task.ffmpeg_ms)}
+      icon="hero-bolt"
+      tone="primary"
+      hint={"exit code #{@task.exit_code || "—"}"}
+    />
+    <.stat
+      id="task-transfer"
+      label="S3 transfer"
+      value={format_ms(sum_ms([@task.s3_download_ms, @task.s3_upload_ms]))}
+      icon="hero-arrows-up-down"
+      tone="info"
+      hint={"↓ #{format_ms(@task.s3_download_ms)} · ↑ #{format_ms(@task.s3_upload_ms)}"}
+    />
+    <.stat
+      id="task-attempts"
+      label="Attempts"
+      value={"#{@task.attempt} / #{@task.queue.max_attempts}"}
+      icon="hero-arrow-path"
+      tone={if @task.attempt > 1, do: "warning", else: "neutral"}
+      hint={"last on #{@task.node || "—"}"}
+    />
+  </div>
+
+  <.card title="Time breakdown (last attempt)" class="mt-6">
+    <div class="p-5">
+      <.stage_bar id="task-stage-bar" timings={Map.from_struct(@task)} />
+    </div>
+  </.card>
+
+  <div class="mt-6 grid gap-6 lg:grid-cols-3">
+    <div class="space-y-6 lg:col-span-2">
+      <.card :if={length(@attempts) > 1} title="Attempts">
+        <ul id="task-attempts-list" class="divide-y divide-base-200">
+          <li :for={a <- @attempts} class="px-5 py-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm">
+              <span class="font-medium">
+                Attempt {a.number}
+                <span class="font-mono text-xs text-base-content/50">on {a.node}</span>
+              </span>
+              <%= case a.outcome do %>
+                <% :completed -> %>
+                  <span class="text-xs text-success">completed</span>
+                <% :running -> %>
+                  <span class="text-xs text-info">running</span>
+                <% {:failed, error} -> %>
+                  <span class="max-w-md truncate text-xs text-error">{error}</span>
+              <% end %>
+            </div>
+            <.stage_bar id={"attempt-bar-#{a.number}"} timings={a.timings} />
+          </li>
+        </ul>
+      </.card>
+
+      <.card title="History">
+        <ol id="task-events" class="relative px-5 py-4">
+          <li
+            :for={event <- @events}
+            id={"event-#{event.seq}"}
+            class="relative flex gap-4 pb-4 last:pb-0"
+          >
+            <div class="flex flex-col items-center">
+              <span class={[
+                "mt-1.5 size-2.5 rounded-full ring-4 ring-base-100",
+                event_color(event.type)
+              ]} />
+              <span class="w-px flex-1 bg-base-300" />
+            </div>
+            <div class="min-w-0 flex-1 pb-1">
+              <div class="flex flex-wrap items-baseline justify-between gap-x-4">
+                <p class="text-sm font-medium">
+                  {event_label(event.type)}
+                  <span
+                    :if={event.duration_ms}
+                    class="ml-1 rounded bg-base-200 px-1.5 py-0.5 text-xs font-normal tabular-nums"
+                  >
+                    {format_ms(event.duration_ms)}
+                  </span>
+                </p>
+                <p class="text-xs tabular-nums text-base-content/50">
+                  {format_time(event.occurred_at)}
+                  <span class="ml-1 text-base-content/40">+{format_ms(offset_ms(event, @task))}</span>
+                </p>
+              </div>
+              <p class="mt-0.5 text-xs text-base-content/50">
+                #{event.seq}
+                <span :if={event.attempt > 0}>· attempt {event.attempt}</span>
+                · <span class="font-mono">{event.node}</span>
+              </p>
+              <p :if={event_summary(event)} class="mt-1 break-all text-xs text-base-content/70">
+                {event_summary(event)}
+              </p>
+            </div>
+          </li>
+        </ol>
+      </.card>
+    </div>
+
+    <div class="space-y-6">
+      <.card title="Details">
+        <dl class="divide-y divide-base-200 text-sm">
+          <.detail label="Queue">
+            <.link
+              navigate={~p"/admin/queues/#{@task.queue}"}
+              class="text-primary hover:underline"
+            >
+              {@task.queue.name}
+            </.link>
+          </.detail>
+          <.detail label="API key">{(@task.api_key && @task.api_key.name) || "—"}</.detail>
+          <.detail label="Content type">{@task.content_type || "—"}</.detail>
+          <.detail label="Input">{format_bytes(@task.input_size)}</.detail>
+          <.detail label="Output">{format_bytes(@task.output_size)}</.detail>
+          <.detail label="Uploaded">{format_dt(@task.uploaded_at)}</.detail>
+          <.detail label="Finished">{format_dt(@task.finished_at)}</.detail>
+          <.detail label="Downloaded">{format_dt(@task.downloaded_at)}</.detail>
+          <.detail label="Expires">{format_dt(@task.expires_at)}</.detail>
+          <.detail label="Source file">
+            {if @task.input_deleted_at,
+              do: "deleted #{format_relative(@task.input_deleted_at)}",
+              else: "stored"}
+          </.detail>
+          <.detail label="Result file">
+            <%= cond do %>
+              <% @task.output_deleted_at -> %>
+                deleted {format_relative(@task.output_deleted_at)}
+              <% @task.output_key -> %>
+                stored
+              <% true -> %>
+                —
+            <% end %>
+          </.detail>
+        </dl>
+      </.card>
+    </div>
+  </div>
+
+  <.card title="Logs" class="mt-6 overflow-hidden">
+    <:actions>
+      <form :if={@task.attempt > 1} id="log-attempt-form" phx-change="log_attempt">
+        <select name="attempt" class="select select-xs">
+          <option value="">All attempts</option>
+          <option :for={n <- 1..@task.attempt} value={n} selected={@log_attempt == n}>
+            Attempt {n}
+          </option>
+        </select>
+      </form>
+    </:actions>
+    <%= cond do %>
+      <% @logs != [] -> %>
+        <div
+          id="task-logs"
+          class="max-h-[32rem] overflow-auto bg-neutral px-4 py-3 font-mono text-xs leading-5 text-neutral-content"
+        >
+          <div :for={log <- @logs} class={["flex gap-3", log.level == :error && "text-error"]}>
+            <span class="shrink-0 select-none opacity-40">{log.attempt}</span>
+            <span class="whitespace-pre-wrap break-all">{log.message}</span>
+          </div>
+        </div>
+      <% @logs_pruned? -> %>
+        <.empty_state
+          id="logs-pruned"
+          icon="hero-archive-box-x-mark"
+          title="Logs are not available"
+        >
+          They were removed by the retention policy ({@task.queue.log_retention_days} days).
+        </.empty_state>
+      <% true -> %>
+        <.empty_state id="logs-empty" icon="hero-document-text" title="No logs yet" />
+    <% end %>
+  </.card>
+</Layouts.app>

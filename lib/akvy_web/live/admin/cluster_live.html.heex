@@ -1,0 +1,165 @@
+<Layouts.app flash={@flash} current_scope={@current_scope} active={:cluster}>
+  <.page_header title="Cluster" subtitle="Nodes discovered through the shared database">
+    <:actions>
+      <span class="inline-flex items-center gap-2 text-xs text-base-content/60">
+        <span class="size-2 rounded-full bg-success animate-pulse" /> live · every 3s
+      </span>
+    </:actions>
+  </.page_header>
+
+  <div
+    :if={!@distributed?}
+    id="cluster-not-distributed"
+    class="mb-6 flex gap-3 rounded-2xl border border-warning/30 bg-warning/5 p-4 text-sm"
+  >
+    <.icon name="hero-information-circle" class="size-5 shrink-0 text-warning" />
+    <p>
+      This node runs without Erlang distribution (development mode), so it cannot join a cluster.
+      Releases start distributed and discover each other automatically.
+    </p>
+  </div>
+
+  <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+    <.stat
+      id="cluster-nodes"
+      label="Nodes"
+      value={@summary.reachable}
+      icon="hero-server-stack"
+      tone={if @summary.reachable == @summary.nodes, do: "success", else: "warning"}
+      hint={"#{@summary.nodes - @summary.reachable} unreachable · #{@summary.schedulers} schedulers"}
+    />
+    <.stat
+      id="cluster-ffmpeg"
+      label="FFmpeg slots"
+      value={"#{@summary.ffmpeg_running} / #{@summary.ffmpeg_limit}"}
+      icon="hero-bolt"
+      tone="primary"
+      hint={"#{format_percent(@summary.ffmpeg_running, @summary.ffmpeg_limit)} busy"}
+    />
+    <.stat
+      id="cluster-cpu"
+      label="Average CPU"
+      value={format_cpu(@summary.cpu_percent)}
+      icon="hero-cpu-chip"
+      tone="info"
+      hint={"run queue #{@summary.run_queue}"}
+    />
+    <.stat
+      id="cluster-memory"
+      label="BEAM memory"
+      value={format_bytes(@summary.beam_memory)}
+      icon="hero-circle-stack"
+      tone="neutral"
+      hint="sum over nodes"
+    />
+  </div>
+
+  <div id="cluster-node-list" class="mt-6 grid gap-6 xl:grid-cols-2">
+    <.card :for={n <- @nodes} id={"node-#{dom_id(n.node)}"} class="overflow-hidden">
+      <div class="flex items-start justify-between gap-4 border-b border-base-300 px-5 py-4">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <span class={[
+              "size-2.5 rounded-full",
+              if(n.reachable, do: "bg-success", else: "bg-error")
+            ]} />
+            <p class="truncate font-semibold">{n.instance}</p>
+
+            <span
+              :if={n.current?}
+              class="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary"
+            >
+              this node
+            </span>
+          </div>
+
+          <p class="mt-1 truncate font-mono text-xs text-base-content/50">{n.node}</p>
+        </div>
+
+        <p :if={n.reachable} class="text-right text-xs text-base-content/50 whitespace-nowrap">
+          up {format_ms(n.uptime_ms)}<br /> v{n.version} · OTP {n.otp_release}
+        </p>
+      </div>
+
+      <%= if n.reachable do %>
+        <div class="grid grid-cols-2 gap-px bg-base-300 sm:grid-cols-4">
+          <.metric label="FFmpeg" value={"#{n.ffmpeg.running} / #{n.ffmpeg.limit}"}>
+            <.meter value={n.ffmpeg.running} max={n.ffmpeg.limit} />
+          </.metric>
+
+          <.metric label="CPU" value={format_cpu(n.cpu_percent)}>
+            <.meter value={n.cpu_percent || 0} max={100} />
+          </.metric>
+
+          <.metric
+            label="Memory"
+            value={
+              if n.system_memory_total,
+                do: format_bytes(n.system_memory_total - (n.system_memory_available || 0)),
+                else: "—"
+            }
+          >
+            <.meter
+              value={(n.system_memory_total || 0) - (n.system_memory_available || 0)}
+              max={n.system_memory_total || 0}
+            />
+          </.metric>
+
+          <.metric label="Load 1m" value={n.load1 || "—"}>
+            <p class="text-[11px] text-base-content/40">{n.schedulers} schedulers</p>
+          </.metric>
+        </div>
+
+        <div class="px-5 py-4">
+          <div class="mb-2 flex items-center justify-between text-xs text-base-content/50">
+            <span>Last 5 minutes</span>
+            <span class="flex items-center gap-3">
+              <span class="flex items-center gap-1"><span class="size-2 rounded-sm bg-info/60" />
+              CPU</span>
+              <span class="flex items-center gap-1"><span class="size-2 rounded-sm bg-primary" />
+              ffmpeg slots</span>
+            </span>
+          </div>
+
+          <.sparkline id={"spark-#{dom_id(n.node)}"} history={n.history} limit={n.ffmpeg.limit} />
+        </div>
+
+        <dl class="grid grid-cols-2 gap-x-6 gap-y-1.5 border-t border-base-300 px-5 py-3 text-xs sm:grid-cols-4">
+          <div>
+            <dt class="text-base-content/50">Processes</dt>
+
+            <dd class="font-medium tabular-nums">{n.process_count}</dd>
+          </div>
+
+          <div>
+            <dt class="text-base-content/50">Run queue</dt>
+
+            <dd class="font-medium tabular-nums">{n.run_queue}</dd>
+          </div>
+
+          <div>
+            <dt class="text-base-content/50">BEAM memory</dt>
+
+            <dd class="font-medium tabular-nums">{format_bytes(n.beam_memory)}</dd>
+          </div>
+
+          <div>
+            <dt class="text-base-content/50">Processed 24h</dt>
+
+            <dd class="font-medium tabular-nums">
+              {(@processed[n.instance] && @processed[n.instance].processed) || 0}
+              <span
+                :if={@processed[n.instance] && @processed[n.instance].failed > 0}
+                class="text-error"
+              >
+                · {@processed[n.instance].failed} failed
+              </span>
+            </dd>
+          </div>
+        </dl>
+      <% else %>
+        <p class="px-5 py-4 text-sm text-error">Unreachable: {n.error}</p>
+      <% end %>
+    </.card>
+  </div>
+</Layouts.app>
