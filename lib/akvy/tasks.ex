@@ -33,7 +33,7 @@ defmodule Akvy.Tasks do
           | {:before_id, UUIDv7.t() | nil}
           | {:limit, pos_integer()}
 
-  @type filters :: %{optional(atom()) => term()} | [filter()]
+  @type filters :: [filter()] | %{optional(atom()) => term()}
 
   @type log_option :: {:limit, pos_integer()} | {:attempt, non_neg_integer() | nil}
 
@@ -197,8 +197,10 @@ defmodule Akvy.Tasks do
   Stores the uploaded file in S3 and creates the task with its first events and
   the conversion job in a single transaction.
 
-  `upload` is a map with `:path`, `:filename` and `:content_type`.
+  `upload` is a map with `:path`, `:filename` and `:content_type`. On failure the
+  stored input is deleted and the storage error or rollback reason is returned.
   """
+  @spec create_task(Queue.t(), ApiKey.t() | nil, upload()) :: {:ok, Task.t()} | {:error, term()}
   def create_task(%Queue{} = queue, api_key, %{path: path} = upload) do
     id = UUIDv7.generate()
     input_key = "inputs/#{id}"
@@ -220,6 +222,15 @@ defmodule Akvy.Tasks do
     end
   end
 
+  @spec insert_task(
+          UUIDv7.t(),
+          Queue.t(),
+          ApiKey.t() | nil,
+          upload(),
+          Storage.key(),
+          non_neg_integer(),
+          non_neg_integer()
+        ) :: {:ok, {Task.t(), [TaskEvent.t()]}} | {:error, term()}
   defp insert_task(id, queue, api_key, upload, input_key, size, upload_ms) do
     Repo.transaction(fn ->
       uploaded =
@@ -263,6 +274,7 @@ defmodule Akvy.Tasks do
   Returns `{:ok, task, event}`, `{:error, :stale}` when another writer changed the
   task first, or `{:error, {:invalid_transition, status, type}}`.
   """
+  @spec record(Task.t(), TaskEvent.type(), [record_option()]) :: record_result()
   def record(%Task{} = task, type, opts \\ []) do
     case Repo.transaction(fn ->
            case apply_event(task, type, opts) do
@@ -280,6 +292,7 @@ defmodule Akvy.Tasks do
   end
 
   @doc "Like `record/3`, but reloads the task and retries once on a stale version."
+  @spec record_fresh(Task.t(), TaskEvent.type(), [record_option()]) :: record_result()
   def record_fresh(%Task{} = task, type, opts \\ []) do
     case record(task, type, opts) do
       {:error, :stale} -> record(get_task!(task.id), type, opts)
@@ -287,6 +300,7 @@ defmodule Akvy.Tasks do
     end
   end
 
+  @spec apply_event(Task.t(), TaskEvent.type(), [record_option()]) :: record_result()
   defp apply_event(%Task{} = task, type, opts) do
     event = build_event(task, type, opts)
 
@@ -308,6 +322,7 @@ defmodule Akvy.Tasks do
     end
   end
 
+  @spec build_event(Task.t(), TaskEvent.type(), [record_option()]) :: TaskEvent.t()
   defp build_event(%Task{} = task, type, opts) do
     %TaskEvent{
       id: UUIDv7.generate(),
@@ -329,6 +344,7 @@ defmodule Akvy.Tasks do
   end
 
   @doc "Compact, JSON-friendly notification sent to subscribers and SSE clients."
+  @spec notification_payload(Task.t(), TaskEvent.t()) :: payload()
   def notification_payload(%Task{} = task, %TaskEvent{} = event) do
     %{
       "id" => task.id,
@@ -349,15 +365,19 @@ defmodule Akvy.Tasks do
   ## Download lifecycle
 
   @doc "Locks a completed task for download (completed -> downloading)."
+  @spec start_download(Task.t()) :: record_result()
   def start_download(%Task{} = task), do: record(task, :download_started)
 
   @doc "Marks the result as downloaded and removes it from storage."
+  @spec finish_download(Task.t()) :: {:ok, Task.t()} | {:error, term()}
   def finish_download(%Task{} = task) do
     with {:ok, task, _} <- record_fresh(task, :downloaded) do
       delete_output(task)
     end
   end
 
+  @doc "Releases the download lock (downloading -> completed)."
+  @spec abort_download(Task.t()) :: {:ok, Task.t()} | {:error, record_error()}
   def abort_download(%Task{} = task) do
     with {:ok, task, _} <- record_fresh(task, :download_aborted), do: {:ok, task}
   end
@@ -368,6 +388,7 @@ defmodule Akvy.Tasks do
   Cancels a task: stops its job (including a running ffmpeg on any instance) and
   removes its files. Allowed while the task is queued, processing or completed.
   """
+  @spec cancel_task(Task.t()) :: {:ok, Task.t()} | {:error, term()}
   def cancel_task(%Task{} = task) do
     with {:ok, task, _} <- record_fresh(task, :cancelled) do
       Oban.cancel_all_jobs(
@@ -381,6 +402,7 @@ defmodule Akvy.Tasks do
   end
 
   @doc "Deletes the source file from storage (once) and records it."
+  @spec delete_input(Task.t()) :: {:ok, Task.t()} | {:error, term()}
   def delete_input(%Task{input_key: key, input_deleted_at: nil} = task) when is_binary(key) do
     with :ok <- Storage.delete(key),
          {:ok, task, _} <- record_fresh(task, :input_deleted, data: %{"key" => key}) do
@@ -391,6 +413,7 @@ defmodule Akvy.Tasks do
   def delete_input(%Task{} = task), do: {:ok, task}
 
   @doc "Deletes the converted file from storage (once) and records it."
+  @spec delete_output(Task.t()) :: {:ok, Task.t()} | {:error, term()}
   def delete_output(%Task{output_key: key, output_deleted_at: nil} = task) when is_binary(key) do
     with :ok <- Storage.delete(key),
          {:ok, task, _} <- record_fresh(task, :output_deleted, data: %{"key" => key}) do
@@ -403,6 +426,7 @@ defmodule Akvy.Tasks do
   ## History
 
   @doc "Rebuilds the snapshot of a task from its event history and persists it."
+  @spec rebuild_snapshot(UUIDv7.t()) :: {:ok, Task.t()} | {:error, Projector.invalid_transition()}
   def rebuild_snapshot(task_id) do
     task = get_task!(task_id)
     events = list_events(task_id)
@@ -417,7 +441,8 @@ defmodule Akvy.Tasks do
 
   ## Logs
 
-  @doc "Inserts log rows. Each entry: `%{attempt, source, level, message}`."
+  @doc "Inserts log rows in one statement; messages are truncated to 4000 characters."
+  @spec insert_logs(UUIDv7.t(), [log_entry()]) :: :ok
   def insert_logs(_task_id, []), do: :ok
 
   def insert_logs(task_id, entries) do
@@ -444,6 +469,7 @@ defmodule Akvy.Tasks do
   ## Helpers
 
   @doc false
+  @spec timed((-> result)) :: {non_neg_integer(), result} when result: var
   def timed(fun) do
     started = System.monotonic_time()
     result = fun.()

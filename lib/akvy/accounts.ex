@@ -108,6 +108,7 @@ defmodule Akvy.Accounts do
   The user is in sudo mode when the last authentication was done no further
   than 20 minutes ago. The limit can be given as second argument in minutes.
   """
+  @spec sudo_mode?(User.t() | nil, integer()) :: boolean()
   def sudo_mode?(user, minutes \\ -20)
 
   def sudo_mode?(%User{authenticated_at: ts}, minutes) when is_struct(ts, DateTime) do
@@ -127,6 +128,8 @@ defmodule Akvy.Accounts do
       %Ecto.Changeset{data: %User{}}
 
   """
+  @spec change_user_email(User.t(), map(), [User.email_option()]) ::
+          Ecto.Changeset.t(User.t())
   def change_user_email(user, attrs \\ %{}, opts \\ []) do
     User.email_changeset(user, attrs, opts)
   end
@@ -134,8 +137,11 @@ defmodule Akvy.Accounts do
   @doc """
   Updates the user email using the given token.
 
-  If the token matches, the user email is updated and the token is deleted.
+  If the token matches, the user email is updated and all email change tokens
+  for the old address are deleted.
   """
+  @spec update_user_email(User.t(), String.t()) ::
+          {:ok, User.t()} | {:error, :transaction_aborted}
   def update_user_email(user, token) do
     context = "change:#{user.email}"
 
@@ -163,6 +169,8 @@ defmodule Akvy.Accounts do
       %Ecto.Changeset{data: %User{}}
 
   """
+  @spec change_user_password(User.t(), map(), [User.password_option()]) ::
+          Ecto.Changeset.t(User.t())
   def change_user_password(user, attrs \\ %{}, opts \\ []) do
     User.password_changeset(user, attrs, opts)
   end
@@ -181,6 +189,8 @@ defmodule Akvy.Accounts do
       {:error, %Ecto.Changeset{}}
 
   """
+  @spec update_user_password(User.t(), map()) ::
+          {:ok, user_and_expired_tokens()} | {:error, Ecto.Changeset.t(User.t())}
   def update_user_password(user, attrs) do
     user
     |> User.password_changeset(attrs)
@@ -189,9 +199,8 @@ defmodule Akvy.Accounts do
 
   ## Session
 
-  @doc """
-  Generates a session token.
-  """
+  @doc "Generates and stores a session token; returns the raw token."
+  @spec generate_user_session_token(User.t()) :: binary()
   def generate_user_session_token(user) do
     {token, user_token} = UserToken.build_session_token(user)
     Repo.insert!(user_token)
@@ -203,14 +212,14 @@ defmodule Akvy.Accounts do
 
   If the token is valid `{user, token_inserted_at}` is returned, otherwise `nil` is returned.
   """
+  @spec get_user_by_session_token(binary()) :: {User.t(), DateTime.t()} | nil
   def get_user_by_session_token(token) do
     {:ok, query} = UserToken.verify_session_token_query(token)
     Repo.one(query)
   end
 
-  @doc """
-  Gets the user with the given magic link token.
-  """
+  @doc "Gets the user with the given magic link token, or nil."
+  @spec get_user_by_magic_link_token(String.t()) :: User.t() | nil
   def get_user_by_magic_link_token(token) do
     with {:ok, query} <- UserToken.verify_magic_link_token_query(token),
          {user, _token} <- Repo.one(query) do
@@ -238,6 +247,9 @@ defmodule Akvy.Accounts do
      source of security pitfalls. See the "Mixing magic link and password registration" section of
      `mix help phx.gen.auth`.
   """
+  @spec login_user_by_magic_link(String.t()) ::
+          {:ok, user_and_expired_tokens()}
+          | {:error, Ecto.Changeset.t(User.t()) | :not_found}
   def login_user_by_magic_link(token) do
     {:ok, query} = UserToken.verify_magic_link_token_query(token)
 
@@ -275,6 +287,11 @@ defmodule Akvy.Accounts do
       {:ok, %{to: ..., body: ...}}
 
   """
+  @spec deliver_user_update_email_instructions(
+          User.t(),
+          String.t(),
+          (String.t() -> String.t())
+        ) :: UserNotifier.delivery()
   def deliver_user_update_email_instructions(%User{} = user, current_email, update_email_url_fun)
       when is_function(update_email_url_fun, 1) do
     {encoded_token, user_token} = UserToken.build_email_token(user, "change:#{current_email}")
@@ -283,9 +300,9 @@ defmodule Akvy.Accounts do
     UserNotifier.deliver_update_email_instructions(user, update_email_url_fun.(encoded_token))
   end
 
-  @doc """
-  Delivers the magic link login instructions to the given user.
-  """
+  @doc "Stores a login token and emails the magic link built by `magic_link_url_fun`."
+  @spec deliver_login_instructions(User.t(), (String.t() -> String.t())) ::
+          UserNotifier.delivery()
   def deliver_login_instructions(%User{} = user, magic_link_url_fun)
       when is_function(magic_link_url_fun, 1) do
     {encoded_token, user_token} = UserToken.build_email_token(user, "login")
@@ -293,9 +310,8 @@ defmodule Akvy.Accounts do
     UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
   end
 
-  @doc """
-  Deletes the signed token with the given context.
-  """
+  @doc "Deletes the given session token."
+  @spec delete_user_session_token(binary()) :: :ok
   def delete_user_session_token(token) do
     Repo.delete_all(from(UserToken, where: [token: ^token, context: "session"]))
     :ok
@@ -303,6 +319,8 @@ defmodule Akvy.Accounts do
 
   ## Token helper
 
+  @spec update_user_and_delete_all_tokens(Ecto.Changeset.t(User.t())) ::
+          {:ok, user_and_expired_tokens()} | {:error, Ecto.Changeset.t(User.t())}
   defp update_user_and_delete_all_tokens(changeset) do
     Repo.transact(fn ->
       with {:ok, user} <- Repo.update(changeset) do
