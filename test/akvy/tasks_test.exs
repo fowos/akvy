@@ -22,7 +22,7 @@ defmodule Akvy.TasksTest do
       assert Local.exists?(task.input_key)
       assert [%{type: :uploaded, seq: 1}, %{type: :enqueued, seq: 2}] = Tasks.list_events(task.id)
       assert_enqueued(worker: Convert, args: %{"task_id" => task.id})
-      assert_receive {:akvy_task, %{"id" => id, "event" => "enqueued"}}
+      assert_receive {:akvy_task, %{id: id, event: "enqueued"}}
       assert id == task.id
     end
   end
@@ -60,8 +60,8 @@ defmodule Akvy.TasksTest do
       assert [_, _, %{type: :attempt_started, seq: 3}, %{type: :s3_download_started, seq: 4}] =
                Tasks.list_events(task.id)
 
-      assert_receive {:akvy_task, %{"event" => "attempt_started", "status" => "processing"}}
-      assert_receive {:akvy_task, %{"event" => "s3_download_started", "seq" => 4}}
+      assert_receive {:akvy_task, %{event: "attempt_started", status: "processing"}}
+      assert_receive {:akvy_task, %{event: "s3_download_started", seq: 4}}
     end
 
     test "writes nothing when any event is not allowed" do

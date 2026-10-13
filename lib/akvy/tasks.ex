@@ -22,8 +22,26 @@ defmodule Akvy.Tasks do
 
   @pubsub Akvy.PubSub
 
-  @typedoc "JSON-friendly task notification, see `notification_payload/2`."
-  @type payload :: %{required(String.t()) => String.t() | integer() | nil}
+  @typedoc """
+  JSON-friendly task notification, see `notification_payload/2`.
+
+  `status` and `event` are the string forms of `t:Akvy.Tasks.Task.status/0` and
+  `t:Akvy.Tasks.TaskEvent.type/0`; timestamps are ISO 8601 strings.
+  """
+  @type payload :: %{
+          id: UUIDv7.t(),
+          queue_id: UUIDv7.t(),
+          api_key_id: UUIDv7.t() | nil,
+          status: String.t(),
+          event: String.t(),
+          seq: pos_integer(),
+          attempt: non_neg_integer(),
+          occurred_at: String.t(),
+          duration_ms: non_neg_integer() | nil,
+          error: String.t() | nil,
+          output_size: non_neg_integer() | nil,
+          expires_at: String.t() | nil
+        }
 
   @type filter ::
           {:status, Task.status() | String.t() | nil}
@@ -101,12 +119,12 @@ defmodule Akvy.Tasks do
   Subscribers receive `{:akvy_task, payload}`.
   """
   @spec broadcast_payload(payload()) :: :ok
-  def broadcast_payload(%{"id" => id} = payload) do
+  def broadcast_payload(%{id: id} = payload) do
     message = {:akvy_task, payload}
     Phoenix.PubSub.broadcast(@pubsub, task_topic(id), message)
     Phoenix.PubSub.broadcast(@pubsub, all_tasks_topic(), message)
 
-    if api_key_id = payload["api_key_id"] do
+    if api_key_id = payload.api_key_id do
       Phoenix.PubSub.broadcast(@pubsub, api_key_topic(api_key_id), message)
     end
 
@@ -397,18 +415,18 @@ defmodule Akvy.Tasks do
   @spec notification_payload(Task.t(), TaskEvent.t()) :: payload()
   def notification_payload(%Task{} = task, %TaskEvent{} = event) do
     %{
-      "id" => task.id,
-      "queue_id" => task.queue_id,
-      "api_key_id" => task.api_key_id,
-      "status" => to_string(task.status),
-      "event" => to_string(event.type),
-      "seq" => event.seq,
-      "attempt" => task.attempt,
-      "occurred_at" => DateTime.to_iso8601(event.occurred_at),
-      "duration_ms" => event.duration_ms,
-      "error" => task.error && String.slice(task.error, 0, 500),
-      "output_size" => task.output_size,
-      "expires_at" => task.expires_at && DateTime.to_iso8601(task.expires_at)
+      id: task.id,
+      queue_id: task.queue_id,
+      api_key_id: task.api_key_id,
+      status: to_string(task.status),
+      event: to_string(event.type),
+      seq: event.seq,
+      attempt: task.attempt,
+      occurred_at: DateTime.to_iso8601(event.occurred_at),
+      duration_ms: event.duration_ms,
+      error: task.error && String.slice(task.error, 0, 500),
+      output_size: task.output_size,
+      expires_at: task.expires_at && DateTime.to_iso8601(task.expires_at)
     }
   end
 

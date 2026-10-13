@@ -61,7 +61,7 @@ defmodule AkvyWeb.Admin.TaskLive.Index do
   end
 
   @impl true
-  def handle_info({:akvy_task, %{"id" => id, "event" => event}}, socket) do
+  def handle_info({:akvy_task, %{id: id, event: event}}, socket) do
     cond do
       MapSet.member?(socket.assigns.loaded_ids, id) ->
         case load_task(id) do

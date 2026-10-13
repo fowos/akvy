@@ -21,9 +21,6 @@ defmodule AkvyWeb.Api.EventController do
   @heartbeat_ms 15_000
   @closing_statuses ~w(completed failed cancelled expired downloaded)
 
-  # String-keyed event payload, see `Akvy.Tasks.notification_payload/2`.
-  @typep payload :: %{optional(String.t()) => term()}
-
   operation :task,
     summary: "Stream events of a task (SSE)",
     description:
@@ -54,7 +51,7 @@ defmodule AkvyWeb.Api.EventController do
         {:ok, conn} ->
           if to_string(task.status) in @closing_statuses,
             do: conn,
-            else: loop(conn, task.version, &(&1["status"] in @closing_statuses))
+            else: loop(conn, task.version, &(&1.status in @closing_statuses))
 
         {:error, conn} ->
           conn
@@ -83,7 +80,7 @@ defmodule AkvyWeb.Api.EventController do
     conn
     |> start_stream()
     |> loop(0, fn _ -> false end, fn payload ->
-      is_nil(queue_id) or payload["queue_id"] == queue_id
+      is_nil(queue_id) or payload.queue_id == queue_id
     end)
   end
 
@@ -100,8 +97,8 @@ defmodule AkvyWeb.Api.EventController do
   @spec loop(
           Plug.Conn.t(),
           non_neg_integer(),
-          (payload() -> boolean()),
-          (payload() -> boolean())
+          (Tasks.payload() -> boolean()),
+          (Tasks.payload() -> boolean())
         ) :: Plug.Conn.t()
   defp loop(conn, min_seq, done?, include? \\ fn _ -> true end) do
     receive do
@@ -110,11 +107,11 @@ defmodule AkvyWeb.Api.EventController do
           not include?.(payload) ->
             loop(conn, min_seq, done?, include?)
 
-          min_seq > 0 and payload["seq"] <= min_seq ->
+          min_seq > 0 and payload.seq <= min_seq ->
             loop(conn, min_seq, done?, include?)
 
           true ->
-            case send_event(conn, Map.delete(payload, "api_key_id")) do
+            case send_event(conn, Map.delete(payload, :api_key_id)) do
               {:ok, conn} ->
                 if done?.(payload), do: conn, else: loop(conn, min_seq, done?, include?)
 
@@ -135,9 +132,9 @@ defmodule AkvyWeb.Api.EventController do
     end
   end
 
-  @spec send_event(Plug.Conn.t(), payload()) :: {:ok | :error, Plug.Conn.t()}
-  defp send_event(conn, payload) do
-    message = "event: task\nid: #{payload["seq"]}\ndata: #{Jason.encode!(payload)}\n\n"
+  @spec send_event(Plug.Conn.t(), TaskJSON.event_json()) :: {:ok | :error, Plug.Conn.t()}
+  defp send_event(conn, event) do
+    message = "event: task\nid: #{event.seq}\ndata: #{Jason.encode!(event)}\n\n"
 
     case chunk(conn, message) do
       {:ok, conn} -> {:ok, conn}

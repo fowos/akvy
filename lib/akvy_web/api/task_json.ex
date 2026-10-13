@@ -36,8 +36,20 @@ defmodule AkvyWeb.Api.TaskJSON do
           links: links()
         }
 
-  @typedoc "SSE event payload with string keys, as in `Akvy.Tasks.notification_payload/2`."
-  @type event_json :: %{required(String.t()) => String.t() | integer() | nil}
+  @typedoc "SSE event data: `t:Akvy.Tasks.payload/0` without `api_key_id`."
+  @type event_json :: %{
+          id: UUIDv7.t(),
+          queue_id: UUIDv7.t(),
+          status: String.t(),
+          event: String.t(),
+          seq: non_neg_integer(),
+          attempt: non_neg_integer(),
+          occurred_at: String.t(),
+          duration_ms: non_neg_integer() | nil,
+          error: String.t() | nil,
+          output_size: non_neg_integer() | nil,
+          expires_at: String.t() | nil
+        }
 
   @doc "Renders a page of tasks with the cursor of the next page."
   @spec index(%{tasks: [Task.t()], next_cursor: UUIDv7.t() | nil}) ::
@@ -89,17 +101,17 @@ defmodule AkvyWeb.Api.TaskJSON do
   @spec snapshot_event(Task.t()) :: event_json()
   def snapshot_event(%Task{} = task) do
     %{
-      "id" => task.id,
-      "queue_id" => task.queue_id,
-      "status" => to_string(task.status),
-      "event" => "snapshot",
-      "seq" => task.version,
-      "attempt" => task.attempt,
-      "occurred_at" => DateTime.to_iso8601(task.updated_at),
-      "duration_ms" => nil,
-      "error" => task.error,
-      "output_size" => task.output_size,
-      "expires_at" => task.expires_at && DateTime.to_iso8601(task.expires_at)
+      id: task.id,
+      queue_id: task.queue_id,
+      status: to_string(task.status),
+      event: "snapshot",
+      seq: task.version,
+      attempt: task.attempt,
+      occurred_at: DateTime.to_iso8601(task.updated_at),
+      duration_ms: nil,
+      error: task.error,
+      output_size: task.output_size,
+      expires_at: task.expires_at && DateTime.to_iso8601(task.expires_at)
     }
   end
 end
