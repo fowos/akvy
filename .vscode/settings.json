@@ -1,0 +1,59 @@
+{
+  // Один language server на проект: ElixirLS (find references, call hierarchy,
+  // go to definition, форматирование .ex/.exs/.heex). Expert отключён, иначе
+  // оба сервера дублируют диагностику, подсказки и спорят за форматирование.
+  "expert.server.enabled": false,
+  "elixirLS.fetchDeps": false,
+  "elixirLS.dialyzerEnabled": true,
+  "elixirLS.suggestSpecs": false,
+
+  // Глобально стоит Prettier, который не умеет Elixir/HEEx.
+  "[elixir]": {
+    "editor.defaultFormatter": "JakeBecker.elixir-ls",
+    "editor.formatOnSave": true,
+    "editor.quickSuggestions": { "strings": "on" }
+  },
+  "[phoenix-heex]": {
+    "editor.defaultFormatter": "JakeBecker.elixir-ls",
+    "editor.formatOnSave": true,
+    "editor.quickSuggestions": { "strings": "on" },
+    "editor.linkedEditing": true
+  },
+
+  // HTML: Emmet-сокращения и автодополнение тегов в .heex.
+  "emmet.includeLanguages": {
+    "phoenix-heex": "html"
+  },
+  "emmet.showExpandedAbbreviation": "always",
+
+  // CSS-классы: Tailwind v4 + daisyUI (конфиг в assets/css/app.css).
+  "tailwindCSS.experimental.configFile": "assets/css/app.css",
+  "tailwindCSS.includeLanguages": {
+    "elixir": "html",
+    "phoenix-heex": "html"
+  },
+  "tailwindCSS.emmetCompletions": true,
+  "tailwindCSS.experimental.classRegex": [
+    // class={["btn", @active && "btn-active"]}
+    ["class=\\{\\[([\\s\\S]*?)\\]\\}", "\"([^\"]*)\""],
+    // class={"..."}
+    "class=\\{\"([^\"]*)\"\\}",
+    // class: "..." в атрибутах компонентов и assigns
+    "class:\\s*\"([^\"]*)\""
+  ],
+
+  // Классы, объявленные в своих css-файлах (ecmel.vscode-html-css).
+  "css.enabledLanguages": ["html", "phoenix-heex", "elixir"],
+  "css.styleSheets": ["assets/css/**/*.css"],
+
+  "files.watcherExclude": {
+    "**/_build/**": true,
+    "**/deps/**": true,
+    "**/.elixir_ls/**": true
+  },
+  "search.exclude": {
+    "**/_build": true,
+    "**/deps": true,
+    "**/.elixir_ls": true
+  }
+}
