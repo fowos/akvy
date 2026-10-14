@@ -1,12 +1,12 @@
 defmodule Akvy.Accounts do
   @moduledoc """
-  Users, password and magic link authentication, session tokens and email changes.
+  Users, password authentication, session tokens and account settings.
   """
 
   import Ecto.Query, warn: false
   alias Akvy.Repo
 
-  alias Akvy.Accounts.{User, UserToken, UserNotifier}
+  alias Akvy.Accounts.{User, UserToken}
 
   @typedoc "Updated user and the tokens that were deleted (to disconnect their sessions)."
   @type user_and_expired_tokens :: {User.t(), [UserToken.t()]}
@@ -32,14 +32,6 @@ defmodule Akvy.Accounts do
   def get_user!(id), do: Repo.get!(User, id)
 
   ## User registration
-
-  @doc "Registers a user with an email only (no password)."
-  @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t(User.t())}
-  def register_user(attrs) do
-    %User{}
-    |> User.email_changeset(attrs)
-    |> Repo.insert()
-  end
 
   @doc """
   Creates a confirmed admin user with a password.
@@ -73,23 +65,13 @@ defmodule Akvy.Accounts do
     User.email_changeset(user, attrs, opts)
   end
 
-  @doc "Applies an email change confirmed by `token` and deletes the change tokens."
-  @spec update_user_email(User.t(), String.t()) ::
-          {:ok, User.t()} | {:error, :transaction_aborted}
-  def update_user_email(user, token) do
-    context = "change:#{user.email}"
-
-    Repo.transact(fn ->
-      with {:ok, query} <- UserToken.verify_change_email_token_query(token, context),
-           %UserToken{sent_to: email} <- Repo.one(query),
-           {:ok, user} <- Repo.update(User.email_changeset(user, %{email: email})),
-           {_count, _result} <-
-             Repo.delete_all(from(UserToken, where: [user_id: ^user.id, context: ^context])) do
-        {:ok, user}
-      else
-        _ -> {:error, :transaction_aborted}
-      end
-    end)
+  @doc "Changes the email right away (the settings page requires sudo mode)."
+  @spec update_user_email(User.t(), map()) ::
+          {:ok, User.t()} | {:error, Ecto.Changeset.t(User.t())}
+  def update_user_email(user, attrs) do
+    user
+    |> User.email_changeset(attrs)
+    |> Repo.update()
   end
 
   @doc "Changeset for changing the password; options as in `Akvy.Accounts.User.password_changeset/3`."
@@ -123,78 +105,6 @@ defmodule Akvy.Accounts do
   def get_user_by_session_token(token) do
     {:ok, query} = UserToken.verify_session_token_query(token)
     Repo.one(query)
-  end
-
-  @doc "Gets the user with the given magic link token, or nil."
-  @spec get_user_by_magic_link_token(String.t()) :: User.t() | nil
-  def get_user_by_magic_link_token(token) do
-    with {:ok, query} <- UserToken.verify_magic_link_token_query(token),
-         {user, _token} <- Repo.one(query) do
-      user
-    else
-      _ -> nil
-    end
-  end
-
-  @doc """
-  Logs the user in by magic link and deletes the link.
-
-  An unconfirmed user is confirmed and all their tokens are deleted. Raises for an
-  unconfirmed user with a password (session fixation protection).
-  """
-  @spec login_user_by_magic_link(String.t()) ::
-          {:ok, user_and_expired_tokens()}
-          | {:error, Ecto.Changeset.t(User.t()) | :not_found}
-  def login_user_by_magic_link(token) do
-    {:ok, query} = UserToken.verify_magic_link_token_query(token)
-
-    case Repo.one(query) do
-      # Prevent session fixation attacks by disallowing magic links for unconfirmed users with password
-      {%User{confirmed_at: nil, hashed_password: hash}, _token} when not is_nil(hash) ->
-        raise """
-        magic link log in is not allowed for unconfirmed users with a password set!
-
-        This cannot happen with the default implementation, which indicates that you
-        might have adapted the code to a different use case. Please make sure to read the
-        "Mixing magic link and password registration" section of `mix help phx.gen.auth`.
-        """
-
-      {%User{confirmed_at: nil} = user, _token} ->
-        user
-        |> User.confirm_changeset()
-        |> update_user_and_delete_all_tokens()
-
-      {user, token} ->
-        Repo.delete!(token)
-        {:ok, {user, []}}
-
-      nil ->
-        {:error, :not_found}
-    end
-  end
-
-  @doc "Stores an email change token and emails the link built by `update_email_url_fun`."
-  @spec deliver_user_update_email_instructions(
-          User.t(),
-          String.t(),
-          (String.t() -> String.t())
-        ) :: UserNotifier.delivery()
-  def deliver_user_update_email_instructions(%User{} = user, current_email, update_email_url_fun)
-      when is_function(update_email_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "change:#{current_email}")
-
-    Repo.insert!(user_token)
-    UserNotifier.deliver_update_email_instructions(user, update_email_url_fun.(encoded_token))
-  end
-
-  @doc "Stores a login token and emails the magic link built by `magic_link_url_fun`."
-  @spec deliver_login_instructions(User.t(), (String.t() -> String.t())) ::
-          UserNotifier.delivery()
-  def deliver_login_instructions(%User{} = user, magic_link_url_fun)
-      when is_function(magic_link_url_fun, 1) do
-    {encoded_token, user_token} = UserToken.build_email_token(user, "login")
-    Repo.insert!(user_token)
-    UserNotifier.deliver_login_instructions(user, magic_link_url_fun.(encoded_token))
   end
 
   @doc "Deletes the given session token."

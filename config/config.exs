@@ -61,10 +61,6 @@ config :akvy, Akvy.Shutdown, enabled: true, drain_ms: 5_000, jobs_ms: 30_000
 
 config :akvy, :work_dir, Path.join(System.tmp_dir!(), "akvy")
 
-config :akvy, Akvy.Mailer, adapter: Swoosh.Adapters.Logger
-
-config :swoosh, :api_client, false
-
 # Cluster discovery is configured in runtime.exs (production releases only).
 config :libcluster, topologies: []
 

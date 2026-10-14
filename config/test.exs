@@ -38,8 +38,6 @@ config :akvy, Akvy.FFmpeg, runner: Akvy.FakeFFmpeg
 
 config :akvy, :work_dir, Path.join(System.tmp_dir!(), "akvy_test_work")
 
-config :akvy, Akvy.Mailer, adapter: Swoosh.Adapters.Test
-
 config :logger, level: :warning
 
 # Initialize plugs at runtime for faster test compilation

@@ -80,7 +80,6 @@ defmodule Akvy.MixProject do
       {:sweet_xml, "~> 0.7.5"},
       {:req, "~> 0.5"},
       {:pbkdf2_elixir, "~> 2.0"},
-      {:swoosh, "~> 1.16"},
       {:recon, "~> 2.5"},
       {:observer_cli, "~> 2.0"}
     ]

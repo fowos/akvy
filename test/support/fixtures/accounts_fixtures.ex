@@ -18,27 +18,12 @@ defmodule Akvy.AccountsFixtures do
     })
   end
 
-  def unconfirmed_user_fixture(attrs \\ %{}) do
-    {:ok, user} =
-      attrs
-      |> valid_user_attributes()
-      |> Accounts.register_user()
-
-    user
-  end
-
+  # A confirmed user without a password; use `set_password/1` when a test needs one.
   def user_fixture(attrs \\ %{}) do
-    user = unconfirmed_user_fixture(attrs)
-
-    token =
-      extract_user_token(fn url ->
-        Accounts.deliver_login_instructions(user, url)
-      end)
-
-    {:ok, {user, _expired_tokens}} =
-      Accounts.login_user_by_magic_link(token)
-
-    user
+    %Accounts.User{}
+    |> Accounts.User.email_changeset(valid_user_attributes(attrs))
+    |> Accounts.User.confirm_changeset()
+    |> Akvy.Repo.insert!()
   end
 
   def user_scope_fixture do
@@ -57,12 +42,6 @@ defmodule Akvy.AccountsFixtures do
     user
   end
 
-  def extract_user_token(fun) do
-    {:ok, captured_email} = fun.(&"[TOKEN]#{&1}[TOKEN]")
-    [_, token | _] = String.split(captured_email.text_body, "[TOKEN]")
-    token
-  end
-
   def override_token_authenticated_at(token, authenticated_at) when is_binary(token) do
     Akvy.Repo.update_all(
       from(t in Accounts.UserToken,
@@ -70,12 +49,6 @@ defmodule Akvy.AccountsFixtures do
       ),
       set: [authenticated_at: authenticated_at]
     )
-  end
-
-  def generate_user_magic_link_token(user) do
-    {encoded_token, user_token} = Accounts.UserToken.build_email_token(user, "login")
-    Akvy.Repo.insert!(user_token)
-    {encoded_token, user_token.token}
   end
 
   def offset_user_token(token, amount_to_add, unit) do
