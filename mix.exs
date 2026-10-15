@@ -11,7 +11,8 @@ defmodule Akvy.MixProject do
       aliases: aliases(),
       deps: deps(),
       compilers: [:phoenix_live_view] ++ Mix.compilers(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      dialyzer: [plt_local_path: "priv/plts", plt_core_path: "priv/plts"]
     ]
   end
 
@@ -81,7 +82,8 @@ defmodule Akvy.MixProject do
       {:req, "~> 0.5"},
       {:pbkdf2_elixir, "~> 2.0"},
       {:recon, "~> 2.5"},
-      {:observer_cli, "~> 2.0"}
+      {:observer_cli, "~> 2.0"},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 
